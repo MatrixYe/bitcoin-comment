@@ -2,7 +2,7 @@
 本项目致力于收集并注释中本聪在邮件列表中提及的全部比特币早期版本，帮助爱好者系统阅读、理解比特币核心代码的演进脉络。
 
 
-## 代码版本和邮件
+## 代码版本
 
 | 版本号         | 时间         | 邮件提及                                                                                                                                                               | 源代码下载                                                                                   |
 | ----------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -16,6 +16,7 @@
 | 0.3.18      | 2010-12-08 | [\[bitcoin-list\] Bitcoin 0.3.18 is released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/15/)\|    | [GitHub - bitcoin/bitcoin at v0.3.18](https://github.com/bitcoin/bitcoin/tree/v0.3.18) |
 | 0.3.19      | 2010-12-13 | [\[bitcoin-list\] Bitcoin 0.3.19 is released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/16/)      | [GitHub - bitcoin/bitcoin at v0.3.19](https://github.com/bitcoin/bitcoin/tree/v0.3.19) |
 
+## 邮件翻译
 
 
 
