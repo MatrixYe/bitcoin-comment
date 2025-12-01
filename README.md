@@ -1,8 +1,10 @@
 # 比特币注释
-本项目致力于收集并注释中本聪在邮件列表中提及的全部比特币早期版本，帮助爱好者系统阅读、理解比特币核心代码的演进脉络。
+本项目致力于收集并注释中本聪的代码和邮件，帮助爱好者系统阅读、理解比特币核心代码的演进脉络。
 
 
-## 代码版本
+## 1. 代码版本
+关于中本聪在邮件列表中提及的比特币核心代码的多个版本。现代比特币源代码可以在[比特币核心仓库](https://github.com/bitcoin/bitcoin)中找到。
+
 
 | 版本号         | 时间         | 邮件提及                                                                                                                                                               | 源代码下载                                                                                   |
 | ----------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -16,7 +18,24 @@
 | 0.3.18      | 2010-12-08 | [\[bitcoin-list\] Bitcoin 0.3.18 is released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/15/)\|    | [GitHub - bitcoin/bitcoin at v0.3.18](https://github.com/bitcoin/bitcoin/tree/v0.3.18) |
 | 0.3.19      | 2010-12-13 | [\[bitcoin-list\] Bitcoin 0.3.19 is released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/16/)      | [GitHub - bitcoin/bitcoin at v0.3.19](https://github.com/bitcoin/bitcoin/tree/v0.3.19) |
 
-## 邮件翻译
+## 2. 邮件翻译
 
+包含中本聪在多个邮件组中发布的邮件，可以更好地理解中本聪关于比特币系统的时间发展和设计决策。
+1. [Bitcoin P2P e-cash paper](emails/Bitcoin%20P2P%20e-cash%20paper.md)
 
+2. TODO: 补充其他邮件并写入emails目录
 
+## 3. 代码注解
+包含对比特币核心代码的详细注解，可以更好地理解中本聪关于比特币系统的设计和实现。
+
+TODO: 写入comment目录
+
+- 关于未完成的p2p market 的设计
+- 关于默克尔树的实现
+- 关于区块的结构和验证
+- 关于交易的结构和验证
+- 关于难度调整机制的设计
+- 。。。 。。。
+- TODO:补充其他代码细节
+
+TODO: 完成上述每一部分的文字注解，请使用rust语言复写一遍，确保代码的可读性。中本聪就是老师。
