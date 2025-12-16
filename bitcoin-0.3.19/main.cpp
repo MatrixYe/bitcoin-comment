@@ -4,6 +4,7 @@
 
 #include "cryptopp/sha.h"
 #include "headers.h"
+#include "headers.h"
 
 //
 // Global state
@@ -1051,7 +1052,7 @@ bool CTransaction::ClientConnectInputs() {
         return error("ConnectInputs() : VerifySignature failed");
 
       ///// this is redundant with the mapNextTx stuff, not sure which I want to
-      ///get rid of
+      /// get rid of
       ///// this has to go away now that posNext is gone
       // // Check for conflicts
       // if (!txPrev.vout[prevout.n].posNext.IsNull())
