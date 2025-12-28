@@ -2,71 +2,67 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file license.txt or http://www.opensource.org/licenses/mit-license.php.
 
-class COutPoint;    // 交易输出点引用（标识特定交易的特定输出）
-class CInPoint;     // 交易输入点引用
-class CDiskTxPos;   // 磁盘上交易的位置信息
-class CCoinBase;    // 创币交易（区块奖励交易）
-class CTxIn;        // 交易输入（引用前一交易的输出）
-class CTxOut;       // 交易输出（包含金额和锁定脚本）
-class CTransaction; // 比特币交易
-class CBlock;       // 区块（包含交易列表和工作量证明）
-class CBlockIndex;  // 区块索引（用于快速查找区块）
-class CWalletTx;    // 钱包交易（带钱包元数据的交易）
-class CKeyItem;     // 钱包中的密钥项
+class COutPoint;
+class CInPoint;
+class CDiskTxPos;
+class CCoinBase;
+class CTxIn;
+class CTxOut;
+class CTransaction;
+class CBlock;
+class CBlockIndex;
+class CWalletTx;
+class CKeyItem;
 
-static const unsigned int MAX_SIZE = 0x02000000; // 最大区块大小（32MB）
-static const int64 COIN = 100000000;             // 1 BTC = 1亿聪（最小单位）
-static const int64 CENT = 1000000;               // ？？？
-static const int COINBASE_MATURITY = 100;        // 创币交易成熟所需区块数
+static const unsigned int MAX_SIZE = 0x02000000;
+static const int64 COIN = 100000000;
+static const int64 CENT = 1000000;
+static const int COINBASE_MATURITY = 100;
 
-static const CBigNum bnProofOfWorkLimit(~uint256(0) >>
-                                        32); // 工作量证明难度下限
+static const CBigNum bnProofOfWorkLimit(~uint256(0) >> 32);
 
-extern CCriticalSection cs_main; // 主临界区（保护全局状态）
-extern map<uint256, CBlockIndex *>
-    mapBlockIndex;                        // 区块索引映射（Hash -> 索引）
-extern const uint256 hashGenesisBlock;    // 创世区块的哈希值
-extern CBlockIndex *pindexGenesisBlock;   // 创世区块索引指针
-extern int nBestHeight;                   // 当前最佳链的高度
-extern uint256 hashBestChain;             // 最佳链的区块哈希
-extern CBlockIndex *pindexBest;           // 最佳链的最新区块索引
-extern unsigned int nTransactionsUpdated; // 更新的交易数量
-extern string strSetDataDir;              // 数据目录路径
-extern int nDropMessagesTest;             // 测试用：丢弃消息的标志
+extern CCriticalSection cs_main;
+extern map<uint256, CBlockIndex *> mapBlockIndex;
+extern const uint256 hashGenesisBlock;
+extern CBlockIndex *pindexGenesisBlock;
+extern int nBestHeight;
+extern uint256 hashBestChain;
+extern CBlockIndex *pindexBest;
+extern unsigned int nTransactionsUpdated;
+extern string strSetDataDir;
+extern int nDropMessagesTest;
 
 // Settings
-extern int fGenerateBitcoins; // 是否开启比特币挖矿
-extern int64 nTransactionFee; // 交易费（默认为0）
-extern CAddress addrIncoming; // 监听传入连接的地址
+extern int fGenerateBitcoins;
+extern int64 nTransactionFee;
+extern CAddress addrIncoming;
 
-string GetAppDir(); // 获取应用程序数据目录
+string GetAppDir();
 FILE *OpenBlockFile(unsigned int nFile, unsigned int nBlockPos,
-                    const char *pszMode = "rb"); // 打开区块文件
-FILE *AppendBlockFile(unsigned int &nFileRet);   // 追加新区块到文件
-bool AddKey(const CKey &key);                    // 将私钥添加到钱包
-vector<unsigned char> GenerateNewKey();          // 生成新的密钥对
-bool AddToWallet(const CWalletTx &wtxIn);        // 将交易添加到钱包
-void ReacceptWalletTransactions();               // 重新接收钱包交易（重新扫描）
-void RelayWalletTransactions();                  // 广播钱包交易到网络
-bool LoadBlockIndex(bool fAllowNew = true);      // 加载区块索引
-void PrintBlockTree();                           // 打印区块树结构（调试用）
-bool BitcoinMiner();                             // 比特币挖矿函数
-bool ProcessMessages(CNode *pfrom);              // 处理来自节点的消息
-bool ProcessMessage(CNode *pfrom, string strCommand,
-                    CDataStream &vRecv); // 处理特定消息
-bool SendMessages(CNode *pto);           // 向节点发送消息
-int64 GetBalance();                      // 获取钱包余额
+                    const char *pszMode = "rb");
+FILE *AppendBlockFile(unsigned int &nFileRet);
+bool AddKey(const CKey &key);
+vector<unsigned char> GenerateNewKey();
+bool AddToWallet(const CWalletTx &wtxIn);
+void ReacceptWalletTransactions();
+void RelayWalletTransactions();
+bool LoadBlockIndex(bool fAllowNew = true);
+void PrintBlockTree();
+bool BitcoinMiner();
+bool ProcessMessages(CNode *pfrom);
+bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv);
+bool SendMessages(CNode *pto);
+int64 GetBalance();
 bool CreateTransaction(CScript scriptPubKey, int64 nValue, CWalletTx &txNew,
-                       int64 &nFeeRequiredRet);       // 创建交易
-bool CommitTransactionSpent(const CWalletTx &wtxNew); // 提交已花费交易
-bool SendMoney(CScript scriptPubKey, int64 nValue,
-               CWalletTx &wtxNew); // 发送比特币
+                       int64 &nFeeRequiredRet);
+bool CommitTransactionSpent(const CWalletTx &wtxNew);
+bool SendMoney(CScript scriptPubKey, int64 nValue, CWalletTx &wtxNew);
 
-class CDiskTxPos { // 磁盘上交易的位置信息（存储结构）
+class CDiskTxPos {
 public:
-  unsigned int nFile;     // 区块文件编号
-  unsigned int nBlockPos; // 在区块文件中的位置
-  unsigned int nTxPos;    // 交易在区块中的位置
+  unsigned int nFile;
+  unsigned int nBlockPos;
+  unsigned int nTxPos;
 
   CDiskTxPos() { SetNull(); }
 
@@ -78,12 +74,12 @@ public:
   }
 
   IMPLEMENT_SERIALIZE(READWRITE(FLATDATA(*this));)
-  void SetNull() { // 初始化为空值
+  void SetNull() {
     nFile = -1;
     nBlockPos = 0;
     nTxPos = 0;
   }
-  bool IsNull() const { return (nFile == -1); } // 判断是否为空
+  bool IsNull() const { return (nFile == -1); }
 
   friend bool operator==(const CDiskTxPos &a, const CDiskTxPos &b) {
     return (a.nFile == b.nFile && a.nBlockPos == b.nBlockPos &&
@@ -94,7 +90,7 @@ public:
     return !(a == b);
   }
 
-  string ToString() const { // 转换为字符串（调试用）
+  string ToString() const {
     if (IsNull())
       return strprintf("null");
     else
@@ -102,30 +98,30 @@ public:
                        nTxPos);
   }
 
-  void print() const { printf("%s", ToString().c_str()); } // 打印到控制台
+  void print() const { printf("%s", ToString().c_str()); }
 };
 
-class CInPoint { // 交易输入点引用（内存中的快速访问）
+class CInPoint {
 public:
-  CTransaction *ptx; // 指向交易的指针
-  unsigned int n;    // 在该交易中的输入索引
+  CTransaction *ptx;
+  unsigned int n;
 
   CInPoint() { SetNull(); }
   CInPoint(CTransaction *ptxIn, unsigned int nIn) {
     ptx = ptxIn;
     n = nIn;
   }
-  void SetNull() { // 设置为无效状态
+  void SetNull() {
     ptx = NULL;
     n = -1;
   }
-  bool IsNull() const { return (ptx == NULL && n == -1); } // 判断是否为空
+  bool IsNull() const { return (ptx == NULL && n == -1); }
 };
 
-class COutPoint { // 交易输出点引用（UTXO标识）
+class COutPoint {
 public:
-  uint256 hash;   // 包含该输出的交易哈希
-  unsigned int n; // 该输出在交易中的索引位置（从0开始）
+  uint256 hash;
+  unsigned int n;
 
   COutPoint() { SetNull(); }
   COutPoint(uint256 hashIn, unsigned int nIn) {
@@ -133,14 +129,13 @@ public:
     n = nIn;
   }
   IMPLEMENT_SERIALIZE(READWRITE(FLATDATA(*this));)
-  void SetNull() { // 初始化为无效状态
+  void SetNull() {
     hash = 0;
     n = -1;
   }
-  bool IsNull() const { return (hash == 0 && n == -1); } // 判断是否为空
+  bool IsNull() const { return (hash == 0 && n == -1); }
 
-  friend bool operator<(const COutPoint &a,
-                        const COutPoint &b) { // 用于map/set排序
+  friend bool operator<(const COutPoint &a, const COutPoint &b) {
     return (a.hash < b.hash || (a.hash == b.hash && a.n < b.n));
   }
 
@@ -152,12 +147,12 @@ public:
     return !(a == b);
   }
 
-  string ToString() const { // 转换为字符串（显示哈希前6位和索引）
+  string ToString() const {
     return strprintf("COutPoint(%s, %d)", hash.ToString().substr(0, 6).c_str(),
                      n);
   }
 
-  void print() const { printf("%s\n", ToString().c_str()); } // 打印到控制台
+  void print() const { printf("%s\n", ToString().c_str()); }
 };
 
 //
@@ -165,13 +160,13 @@ public:
 // transaction's output that it claims and a signature that matches the
 // output's public key.
 //
-class CTxIn { // 交易输入（消费前一交易的输出）
+class CTxIn {
 public:
-  COutPoint prevout;      // 引用的前序交易输出点
-  CScript scriptSig;      // 解锁脚本（包含签名和公钥）
-  unsigned int nSequence; // 序列号（用于时间锁和RBF）
+  COutPoint prevout;
+  CScript scriptSig;
+  unsigned int nSequence;
 
-  CTxIn() { nSequence = UINT_MAX; } // 默认序列号UINT_MAX表示最终化
+  CTxIn() { nSequence = UINT_MAX; }
 
   explicit CTxIn(COutPoint prevoutIn, CScript scriptSigIn = CScript(),
                  unsigned int nSequenceIn = UINT_MAX) {
@@ -190,7 +185,7 @@ public:
   IMPLEMENT_SERIALIZE(READWRITE(prevout); READWRITE(scriptSig);
                       READWRITE(nSequence);)
 
-  bool IsFinal() const { return (nSequence == UINT_MAX); } // 是否已最终化
+  bool IsFinal() const { return (nSequence == UINT_MAX); }
 
   friend bool operator==(const CTxIn &a, const CTxIn &b) {
     return (a.prevout == b.prevout && a.scriptSig == b.scriptSig &&
@@ -199,7 +194,7 @@ public:
 
   friend bool operator!=(const CTxIn &a, const CTxIn &b) { return !(a == b); }
 
-  string ToString() const { // 转换为字符串（调试显示）
+  string ToString() const {
     string str;
     str += strprintf("CTxIn(");
     str += prevout.ToString();
@@ -216,20 +211,20 @@ public:
     return str;
   }
 
-  void print() const { printf("%s\n", ToString().c_str()); } // 打印到控制台
+  void print() const { printf("%s\n", ToString().c_str()); }
 
-  bool IsMine() const;    // 检查是否属于本钱包
-  int64 GetDebit() const; // 获取该输入花费的金额
+  bool IsMine() const;
+  int64 GetDebit() const;
 };
 
 //
 // An output of a transaction.  It contains the public key that the next input
 // must be able to sign with to claim it.
 //
-class CTxOut { // 交易输出（包含金额和锁定脚本）
+class CTxOut {
 public:
-  int64 nValue;         // 输出金额（单位：聪）
-  CScript scriptPubKey; // 锁定脚本（指定收款方）
+  int64 nValue;
+  CScript scriptPubKey;
 
 public:
   CTxOut() { SetNull(); }
@@ -241,18 +236,18 @@ public:
 
   IMPLEMENT_SERIALIZE(READWRITE(nValue); READWRITE(scriptPubKey);)
 
-  void SetNull() { // 设置为无效状态
+  void SetNull() {
     nValue = -1;
     scriptPubKey.clear();
   }
 
-  bool IsNull() { return (nValue == -1); } // 判断是否为空
+  bool IsNull() { return (nValue == -1); }
 
-  uint256 GetHash() const { return SerializeHash(*this); } // 计算输出的哈希
+  uint256 GetHash() const { return SerializeHash(*this); }
 
-  bool IsMine() const { return ::IsMine(scriptPubKey); } // 检查是否属于本钱包
+  bool IsMine() const { return ::IsMine(scriptPubKey); }
 
-  int64 GetCredit() const { // 获取属于本钱包的金额
+  int64 GetCredit() const {
     if (IsMine())
       return nValue;
     return 0;
@@ -264,7 +259,7 @@ public:
 
   friend bool operator!=(const CTxOut &a, const CTxOut &b) { return !(a == b); }
 
-  string ToString() const { // 转换为字符串（显示金额和脚本摘要）
+  string ToString() const {
     if (scriptPubKey.size() < 6)
       return "CTxOut(error)";
     return strprintf("CTxOut(nValue=%I64d.%08I64d, scriptPubKey=%s)",
@@ -272,38 +267,37 @@ public:
                      scriptPubKey.ToString().substr(0, 24).c_str());
   }
 
-  void print() const { printf("%s\n", ToString().c_str()); } // 打印到控制台
+  void print() const { printf("%s\n", ToString().c_str()); }
 };
 
 //
 // The basic transaction that is broadcasted on the network and contained in
 // blocks.  A transaction can contain multiple inputs and outputs.
 //
-
-class CTransaction { // 比特币交易（网络传输和区块存储的基本单位）
+class CTransaction {
 public:
-  int nVersion;        // 交易版本号
-  vector<CTxIn> vin;   // 交易输入列表
-  vector<CTxOut> vout; // 交易输出列表
-  int nLockTime;       // 锁定时间（可用于时间锁或手续费替换）
+  int nVersion;
+  vector<CTxIn> vin;
+  vector<CTxOut> vout;
+  int nLockTime;
 
   CTransaction() { SetNull(); }
 
   IMPLEMENT_SERIALIZE(READWRITE(this->nVersion); nVersion = this->nVersion;
                       READWRITE(vin); READWRITE(vout); READWRITE(nLockTime);)
 
-  void SetNull() { // 初始化为默认状态
+  void SetNull() {
     nVersion = 1;
     vin.clear();
     vout.clear();
     nLockTime = 0;
   }
 
-  bool IsNull() const { return (vin.empty() && vout.empty()); } // 是否为空交易
+  bool IsNull() const { return (vin.empty() && vout.empty()); }
 
-  uint256 GetHash() const { return SerializeHash(*this); } // 计算交易哈希
+  uint256 GetHash() const { return SerializeHash(*this); }
 
-  bool IsFinal() const { // 是否已最终化（可打包进区块）
+  bool IsFinal() const {
     if (nLockTime == 0 || nLockTime < nBestHeight)
       return true;
     foreach (const CTxIn &txin, vin)
@@ -312,7 +306,7 @@ public:
     return true;
   }
 
-  bool IsNewerThan(const CTransaction &old) const { // 是否比旧交易更新
+  bool IsNewerThan(const CTransaction &old) const {
     if (vin.size() != old.vin.size())
       return false;
     for (int i = 0; i < vin.size(); i++)
@@ -338,9 +332,9 @@ public:
 
   bool IsCoinBase() const {
     return (vin.size() == 1 && vin[0].prevout.IsNull());
-  } // 是否为创币交易
+  }
 
-  bool CheckTransaction() const { // 基本交易验证（不依赖上下文）
+  bool CheckTransaction() const {
     // Basic checks that don't depend on any context
     if (vin.empty() || vout.empty())
       return error("CTransaction::CheckTransaction() : vin or vout empty");
@@ -363,28 +357,28 @@ public:
     return true;
   }
 
-  bool IsMine() const { // 检查交易是否有输出属于本钱包
+  bool IsMine() const {
     foreach (const CTxOut &txout, vout)
       if (txout.IsMine())
         return true;
     return false;
   }
 
-  int64 GetDebit() const { // 获取该交易花费的总金额（输入总额）
+  int64 GetDebit() const {
     int64 nDebit = 0;
     foreach (const CTxIn &txin, vin)
       nDebit += txin.GetDebit();
     return nDebit;
   }
 
-  int64 GetCredit() const { // 获取该交易属于本钱包的金额（输出总额）
+  int64 GetCredit() const {
     int64 nCredit = 0;
     foreach (const CTxOut &txout, vout)
       nCredit += txout.GetCredit();
     return nCredit;
   }
 
-  int64 GetValueOut() const { // 获取该交易输出的总金额
+  int64 GetValueOut() const {
     int64 nValueOut = 0;
     foreach (const CTxOut &txout, vout) {
       if (txout.nValue < 0)
@@ -394,14 +388,14 @@ public:
     return nValueOut;
   }
 
-  int64 GetMinFee(bool fDiscount = false) const { // 获取最小交易费
+  int64 GetMinFee(bool fDiscount = false) const {
     unsigned int nBytes = ::GetSerializeSize(*this, SER_NETWORK);
     if (fDiscount && nBytes < 10000)
       return 0;
     return (1 + (int64)nBytes / 1000) * CENT;
   }
 
-  bool ReadFromDisk(CDiskTxPos pos, FILE **pfileRet = NULL) { // 从磁盘读取交易
+  bool ReadFromDisk(CDiskTxPos pos, FILE **pfileRet = NULL) {
     CAutoFile filein = OpenBlockFile(pos.nFile, 0, pfileRet ? "rb+" : "rb");
     if (!filein)
       return error("CTransaction::ReadFromDisk() : OpenBlockFile failed");
@@ -429,7 +423,7 @@ public:
     return !(a == b);
   }
 
-  string ToString() const { // 转换为字符串（完整的交易信息）
+  string ToString() const {
     string str;
     str += strprintf("CTransaction(hash=%s, ver=%d, vin.size=%d, vout.size=%d, "
                      "nLockTime=%d)\n",
@@ -442,17 +436,16 @@ public:
     return str;
   }
 
-  void print() const { printf("%s", ToString().c_str()); } // 打印到控制台
+  void print() const { printf("%s", ToString().c_str()); }
 
-  bool DisconnectInputs(CTxDB &txdb); // 断开输入连接（回滚）
+  bool DisconnectInputs(CTxDB &txdb);
   bool ConnectInputs(CTxDB &txdb, map<uint256, CTxIndex> &mapTestPool,
                      CDiskTxPos posThisTx, int nHeight, int64 &nFees,
-                     bool fBlock, bool fMiner,
-                     int64 nMinFee = 0); // 连接输入验证
-  bool ClientConnectInputs();            // 客户端连接输入
+                     bool fBlock, bool fMiner, int64 nMinFee = 0);
+  bool ClientConnectInputs();
 
   bool AcceptTransaction(CTxDB &txdb, bool fCheckInputs = true,
-                         bool *pfMissingInputs = NULL); // 接受交易到内存池
+                         bool *pfMissingInputs = NULL);
 
   bool AcceptTransaction(bool fCheckInputs = true,
                          bool *pfMissingInputs = NULL) {
@@ -461,36 +454,35 @@ public:
   }
 
 protected:
-  bool AddToMemoryPool(); // 添加到内存池
+  bool AddToMemoryPool();
 
 public:
-  bool RemoveFromMemoryPool(); // 从内存池移除
+  bool RemoveFromMemoryPool();
 };
 
 //
 // A transaction with a merkle branch linking it to the block chain
 //
-class CMerkleTx
-    : public CTransaction { // 默克尔交易（带区块链链接的梅克尔分支）
+class CMerkleTx : public CTransaction {
 public:
-  uint256 hashBlock;             // 包含该交易的区块哈希
-  vector<uint256> vMerkleBranch; // 梅克尔分支（用于验证交易在区块中）
-  int nIndex;                    // 该交易在区块中的索引位置
+  uint256 hashBlock;
+  vector<uint256> vMerkleBranch;
+  int nIndex;
 
   // memory only
-  mutable bool fMerkleVerified; // 梅克尔验证标记（仅内存）
+  mutable bool fMerkleVerified;
 
   CMerkleTx() { Init(); }
 
   CMerkleTx(const CTransaction &txIn) : CTransaction(txIn) { Init(); }
 
-  void Init() { // 初始化成员变量
+  void Init() {
     hashBlock = 0;
     nIndex = -1;
     fMerkleVerified = false;
   }
 
-  int64 GetCredit() const { // 获取信用额度（考虑成熟度）
+  int64 GetCredit() const {
     // Must wait until coinbase is safely deep enough in the chain before
     // valuing it
     if (IsCoinBase() && GetBlocksToMaturity() > 0)
@@ -503,14 +495,12 @@ public:
                       nVersion = this->nVersion; READWRITE(hashBlock);
                       READWRITE(vMerkleBranch); READWRITE(nIndex);)
 
-  int SetMerkleBranch(const CBlock *pblock = NULL); // 设置梅克尔分支
-  int GetDepthInMainChain() const;                  // 获取在主链中的深度
-  bool IsInMainChain() const {
-    return GetDepthInMainChain() > 0;
-  }                                // 是否在主链中
-  int GetBlocksToMaturity() const; // 获取到成熟期的区块数
-  bool AcceptTransaction(CTxDB &txdb, bool fCheckInputs = true); // 接受交易
-  bool AcceptTransaction() { // 接受交易（简化版）
+  int SetMerkleBranch(const CBlock *pblock = NULL);
+  int GetDepthInMainChain() const;
+  bool IsInMainChain() const { return GetDepthInMainChain() > 0; }
+  int GetBlocksToMaturity() const;
+  bool AcceptTransaction(CTxDB &txdb, bool fCheckInputs = true);
+  bool AcceptTransaction() {
     CTxDB txdb("r");
     return AcceptTransaction(txdb);
   }
@@ -521,19 +511,19 @@ public:
 // about.  It includes any unrecorded transactions needed to link it back
 // to the block chain.
 //
-class CWalletTx : public CMerkleTx { // 钱包交易（包含用户关心的额外信息）
+class CWalletTx : public CMerkleTx {
 public:
-  vector<CMerkleTx> vtxPrev;               // 关联的前序交易列表
-  map<string, string> mapValue;            // 键值对形式的附加信息
-  vector<pair<string, string>> vOrderForm; // 订单表单信息
-  unsigned int fTimeReceivedIsTxTime; // 标记时间来源（交易时间还是接收时间）
-  unsigned int nTimeReceived;         // 节点接收该交易的时间
-  char fFromMe;                       // 标记交易是否由本钱包发起
-  char fSpent;                        // 标记交易输出是否已被花费
+  vector<CMerkleTx> vtxPrev;
+  map<string, string> mapValue;
+  vector<pair<string, string>> vOrderForm;
+  unsigned int fTimeReceivedIsTxTime;
+  unsigned int nTimeReceived; // time received by this node
+  char fFromMe;
+  char fSpent;
   //// probably need to sign the order info so know it came from payer
 
   // memory only
-  mutable unsigned int nTimeDisplayed; // 显示时间（仅内存）
+  mutable unsigned int nTimeDisplayed;
 
   CWalletTx() { Init(); }
 
@@ -541,7 +531,7 @@ public:
 
   CWalletTx(const CTransaction &txIn) : CMerkleTx(txIn) { Init(); }
 
-  void Init() { // 初始化钱包交易成员变量
+  void Init() {
     fTimeReceivedIsTxTime = false;
     nTimeReceived = 0;
     fFromMe = false;
@@ -557,16 +547,13 @@ public:
                       READWRITE(nTimeReceived); READWRITE(fFromMe);
                       READWRITE(fSpent);)
 
-  bool WriteToDisk() {
-    return CWalletDB().WriteTx(GetHash(), *this);
-  } // 写入磁盘
+  bool WriteToDisk() { return CWalletDB().WriteTx(GetHash(), *this); }
 
-  int64 GetTxTime() const; // 获取交易时间
+  int64 GetTxTime() const;
 
-  void AddSupportingTransactions(CTxDB &txdb); // 添加支持性交易
+  void AddSupportingTransactions(CTxDB &txdb);
 
-  bool AcceptWalletTransaction(CTxDB &txdb,
-                               bool fCheckInputs = true); // 接受钱包交易
+  bool AcceptWalletTransaction(CTxDB &txdb, bool fCheckInputs = true);
   bool AcceptWalletTransaction() {
     CTxDB txdb("r");
     return AcceptWalletTransaction(txdb);
@@ -584,33 +571,28 @@ public:
 // locations of transactions that spend its outputs.  vSpent is really only
 // used as a flag, but having the location is very helpful for debugging.
 //
-class CTxIndex {                         // 交易索引（存储交易位置和花费信息）
+class CTxIndex {
 public:
-  CDiskTxPos pos;                       // 交易在磁盘上的位置
-  vector<CDiskTxPos> vSpent;            // 花费该交易输出的交易位置列表
+  CDiskTxPos pos;
+  vector<CDiskTxPos> vSpent;
 
-  CTxIndex() { SetNull(); }             // 默认构造函数
+  CTxIndex() { SetNull(); }
 
-  // 带参数的构造函数
   CTxIndex(const CDiskTxPos &posIn, unsigned int nOutputs) {
     pos = posIn;
-    vSpent.resize(nOutputs);            // 初始化花费位置数组
+    vSpent.resize(nOutputs);
   }
 
-  // 序列化：支持磁盘存储和网络传输
   IMPLEMENT_SERIALIZE(if (!(nType & SER_GETHASH)) READWRITE(nVersion);
                       READWRITE(pos); READWRITE(vSpent);)
 
-  // 重置为无效状态
   void SetNull() {
     pos.SetNull();
     vSpent.clear();
   }
 
-  // 判断是否为空
   bool IsNull() { return pos.IsNull(); }
 
-  // 等于操作符：比较位置和花费记录
   friend bool operator==(const CTxIndex &a, const CTxIndex &b) {
     if (a.pos != b.pos || a.vSpent.size() != b.vSpent.size())
       return false;
@@ -620,53 +602,49 @@ public:
     return true;
   }
 
-  // 不等于操作符
   friend bool operator!=(const CTxIndex &a, const CTxIndex &b) {
     return !(a == b);
   }
 };
 
 //
-// 节点将新交易收集到区块中，将其哈希成哈希树，并扫描随机数值使区块的哈希满足
-// 工作量证明的要求。当他们解决了工作量证明后，就将区块广播给所有人，区块被
-// 添加到区块链中。区块中的第一笔交易是一笔特殊的交易，它创建一枚新币，归区块
-// 创建者所有。
+// Nodes collect new transactions into a block, hash them into a hash tree,
+// and scan through nonce values to make the block's hash satisfy proof-of-work
+// requirements.  When they solve the proof-of-work, they broadcast the block
+// to everyone and the block is added to the block chain.  The first transaction
+// in the block is a special one that creates a new coin owned by the creator
+// of the block.
 //
-// 区块被追加到磁盘上的 blk0001.dat 文件中。它们在磁盘上的位置由内存中的
-// CBlockIndex 对象进行索引。
-//
-// CBlock 类表示一个完整的区块，包含区块头信息和交易列表。
+// Blocks are appended to blk0001.dat files on disk.  Their location on disk
+// is indexed by CBlockIndex objects in memory.
 //
 class CBlock {
 public:
-  // 区块头信息
-  int nVersion;               // 区块版本号，用于协议升级和兼容性
-  uint256 hashPrevBlock;      // 前一个区块的哈希值，形成区块链的链接
-  uint256 hashMerkleRoot;     // 交易梅克尔树的根哈希，用于验证交易完整性
-  unsigned int nTime;         // 区块创建的时间戳（Unix时间戳）
-  unsigned int nBits;         // 难度目标，以压缩格式存储
-  unsigned int nNonce;        // 随机数，用于工作量证明的计算
+  // header
+  int nVersion;
+  uint256 hashPrevBlock;
+  uint256 hashMerkleRoot;
+  unsigned int nTime;
+  unsigned int nBits;
+  unsigned int nNonce;
 
-  // 网络传输和磁盘存储
-  vector<CTransaction> vtx;   // 区块中包含的交易列表
+  // network and disk
+  vector<CTransaction> vtx;
 
-  // 仅在内存中使用的变量，不序列化到磁盘
-  mutable vector<uint256> vMerkleTree;  // 梅克尔树结构，用于快速计算和验证
+  // memory only
+  mutable vector<uint256> vMerkleTree;
 
   CBlock() { SetNull(); }
 
-  // 序列化方法：将区块数据序列化到磁盘或网络传输
-  // 注意：vtx（交易列表）必须放在最后，以便 ConnectBlock 计算偏移量
   IMPLEMENT_SERIALIZE(
       READWRITE(this->nVersion); nVersion = this->nVersion;
       READWRITE(hashPrevBlock); READWRITE(hashMerkleRoot); READWRITE(nTime);
       READWRITE(nBits); READWRITE(nNonce);
 
-      // ConnectBlock 依赖 vtx 在最后以计算偏移量
+      // ConnectBlock depends on vtx being last so it can calculate offset
       if (!(nType & (SER_GETHASH | SER_BLOCKHEADERONLY))) READWRITE(vtx);
       else if (fRead) const_cast<CBlock *>(this)->vtx.clear();)
 
-  // 将区块的所有成员变量重置为初始状态（空值）
   void SetNull() {
     nVersion = 1;
     hashPrevBlock = 0;
@@ -678,14 +656,10 @@ public:
     vMerkleTree.clear();
   }
 
-  // 判断区块是否为空的占位区块（工作量证明为0）
   bool IsNull() const { return (nBits == 0); }
 
-  // 计算区块的哈希值（仅对区块头进行哈希计算）
   uint256 GetHash() const { return Hash(BEGIN(nVersion), END(nNonce)); }
 
-  // 构建梅克尔树并返回根哈希值
-  // 算法：从叶子节点（交易哈希）开始，每层两两配对哈希，直到只剩根哈希
   uint256 BuildMerkleTree() const {
     vMerkleTree.clear();
     foreach (const CTransaction &tx, vtx)
@@ -703,8 +677,6 @@ public:
     return (vMerkleTree.empty() ? 0 : vMerkleTree.back());
   }
 
-  // 获取指定交易的梅克尔分支（用于验证交易在区块中的包含性）
-  // 返回从叶子节点到根路径上的兄弟节点哈希列表
   vector<uint256> GetMerkleBranch(int nIndex) const {
     if (vMerkleTree.empty())
       BuildMerkleTree();
@@ -719,9 +691,6 @@ public:
     return vMerkleBranch;
   }
 
-  // 静态方法：验证梅克尔分支的正确性
-  // 输入：交易哈希、梅克尔分支列表、交易索引
-  // 输出：计算出的根哈希值
   static uint256 CheckMerkleBranch(uint256 hash,
                                    const vector<uint256> &vMerkleBranch,
                                    int nIndex) {
@@ -737,24 +706,20 @@ public:
     return hash;
   }
 
-  // 将区块写入磁盘
-  // fWriteTransactions: 是否写入完整交易数据（false则只写入区块头）
-  // nFileRet: 返回区块所在的文件编号
-  // nBlockPosRet: 返回区块在文件中的位置偏移
   bool WriteToDisk(bool fWriteTransactions, unsigned int &nFileRet,
                    unsigned int &nBlockPosRet) {
-    // 打开历史文件追加数据
+    // Open history file to append
     CAutoFile fileout = AppendBlockFile(nFileRet);
     if (!fileout)
       return error("CBlock::WriteToDisk() : AppendBlockFile failed");
     if (!fWriteTransactions)
       fileout.nType |= SER_BLOCKHEADERONLY;
 
-    // 写入索引头
+    // Write index header
     unsigned int nSize = fileout.GetSerializeSize(*this);
     fileout << FLATDATA(pchMessageStart) << nSize;
 
-    // 写入区块数据
+    // Write block
     nBlockPosRet = ftell(fileout);
     if (nBlockPosRet == -1)
       return error("CBlock::WriteToDisk() : ftell failed");
@@ -763,25 +728,21 @@ public:
     return true;
   }
 
-  // 从磁盘读取区块
-  // nFile: 区块所在的文件编号
-  // nBlockPos: 区块在文件中的位置偏移
-  // fReadTransactions: 是否读取完整交易数据
   bool ReadFromDisk(unsigned int nFile, unsigned int nBlockPos,
                     bool fReadTransactions) {
     SetNull();
 
-    // 打开历史文件读取数据
+    // Open history file to read
     CAutoFile filein = OpenBlockFile(nFile, nBlockPos, "rb");
     if (!filein)
       return error("CBlock::ReadFromDisk() : OpenBlockFile failed");
     if (!fReadTransactions)
       filein.nType |= SER_BLOCKHEADERONLY;
 
-    // 读取区块数据
+    // Read block
     filein >> *this;
 
-    // 验证区块头的有效性
+    // Check the header
     if (CBigNum().SetCompact(nBits) > bnProofOfWorkLimit)
       return error("CBlock::ReadFromDisk() : nBits errors in block header");
     if (GetHash() > CBigNum().SetCompact(nBits).getuint256())
@@ -790,8 +751,6 @@ public:
     return true;
   }
 
-  // 调试用：打印区块的完整信息到控制台
-  // 包含区块哈希、版本、前一区块哈希、梅克尔根、时间戳、难度、随机数和所有交易
   void print() const {
     printf("CBlock(hash=%s, ver=%d, hashPrevBlock=%s, hashMerkleRoot=%s, "
            "nTime=%u, nBits=%08x, nNonce=%u, vtx=%d)\n",
@@ -809,71 +768,39 @@ public:
     printf("\n");
   }
 
-  // 计算区块的出块奖励（创币交易输出）
-  // nFees: 区块中所有交易的手续费总和
-  // 返回值: 该区块的出块奖励（包含创币奖励 + 交易手续费）
   int64 GetBlockValue(int64 nFees) const;
-
-  // 断开区块与区块链的连接（撤销该区块对UTXO集合的修改）
-  // txdb: 交易数据库操作对象
-  // pindex: 指向该区块索引的指针
-  // 返回值: 操作成功返回true，失败返回false
   bool DisconnectBlock(CTxDB &txdb, CBlockIndex *pindex);
-
-  // 将区块连接到区块链（应用该区块对UTXO集合的修改）
-  // txdb: 交易数据库操作对象
-  // pindex: 指向该区块索引的指针
-  // 返回值: 操作成功返回true，失败返回false
   bool ConnectBlock(CTxDB &txdb, CBlockIndex *pindex);
-
-  // 从磁盘读取区块（通过区块索引）
-  // blockindex: 指向区块索引的指针，包含区块在磁盘上的位置信息
-  // fReadTransactions: 是否读取完整交易数据
-  // 返回值: 读取成功返回true，失败返回false
   bool ReadFromDisk(const CBlockIndex *blockindex, bool fReadTransactions);
-
-  // 将区块添加到区块链索引
-  // nFile: 区块所在的文件编号
-  // nBlockPos: 区块在文件中的位置偏移
-  // 返回值: 添加成功返回true，失败返回false
   bool AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos);
-
-  // 检查区块的有效性（不验证工作量证明）
-  // 包括检查交易列表是否为空、区块时间戳、交易Merkle根等
-  // 返回值: 检查通过返回true，失败返回false
   bool CheckBlock() const;
-
-  // 接受区块（验证并添加到区块链）
-  // 包括验证工作量证明、检查区块重复等
-  // 返回值: 接受成功返回true，失败返回false
   bool AcceptBlock();
 };
 
 //
-// 区块链是一个树形结构，以创世区块为根，每个区块可能有多个候选区块作为下一个区块。
-// pprev 和 pnext 指针链接主链/最长链上的路径。一个区块索引可能有多个 pprev 指向它，
-// 但 pnext 只指向最长分支的前向链接，如果区块不在最长链上则为 null。
-//
-// CBlockIndex 类是区块链索引的核心数据结构，用于在内存中快速访问和管理区块信息。
-// 它包含区块在磁盘上的位置信息、区块头信息以及与区块链的链接关系。
+// The block chain is a tree shaped structure starting with the
+// genesis block at the root, with each block potentially having multiple
+// candidates to be the next block.  pprev and pnext link a path through the
+// main/longest chain.  A blockindex may have multiple pprev pointing back
+// to it, but pnext will only point forward to the longest branch, or will
+// be null if the block is not part of the longest chain.
 //
 class CBlockIndex {
 public:
-  const uint256 *phashBlock;     // 指向区块哈希的指针（用于快速访问区块哈希）
-  CBlockIndex *pprev;            // 指向前一个区块的索引（区块链的后向链接）
-  CBlockIndex *pnext;            // 指向下一个区块的索引（主链上的前向链接）
-  unsigned int nFile;            // 区块数据所在的文件编号
-  unsigned int nBlockPos;        // 区块数据在文件中的位置偏移
-  int nHeight;                   // 区块在区块链中的高度（创世区块高度为0）
+  const uint256 *phashBlock;
+  CBlockIndex *pprev;
+  CBlockIndex *pnext;
+  unsigned int nFile;
+  unsigned int nBlockPos;
+  int nHeight;
 
-  // 区块头信息副本（用于快速访问，无需从磁盘读取完整区块）
-  int nVersion;                  // 区块版本号
-  uint256 hashMerkleRoot;        // 交易梅克尔树根哈希
-  unsigned int nTime;            // 区块创建时间戳
-  unsigned int nBits;            // 难度目标（压缩格式）
-  unsigned int nNonce;           // 工作量证明随机数
+  // block header
+  int nVersion;
+  uint256 hashMerkleRoot;
+  unsigned int nTime;
+  unsigned int nBits;
+  unsigned int nNonce;
 
-  // 默认构造函数：初始化所有成员变量为默认值
   CBlockIndex() {
     phashBlock = NULL;
     pprev = NULL;
@@ -889,10 +816,6 @@ public:
     nNonce = 0;
   }
 
-  // 带参数的构造函数：根据区块数据初始化索引
-  // nFileIn: 区块数据所在的文件编号
-  // nBlockPosIn: 区块在文件中的位置偏移
-  // block: 区块对象，从中复制区块头信息
   CBlockIndex(unsigned int nFileIn, unsigned int nBlockPosIn, CBlock &block) {
     phashBlock = NULL;
     pprev = NULL;
@@ -908,25 +831,17 @@ public:
     nNonce = block.nNonce;
   }
 
-  // 获取区块哈希值
-  // 返回值: 指向该区块的哈希值
   uint256 GetBlockHash() const { return *phashBlock; }
 
-  // 判断当前区块是否在主链上
-  // 条件：有后继区块（pnext不为空）或者是当前最佳链的末端
-  // 返回值: 在主链上返回true，否则返回false
   bool IsInMainChain() const { return (pnext || this == pindexBest); }
 
-  // 从磁盘中删除区块数据（用空区块覆盖）
-  // 将指定位置的区块数据替换为空的占位区块
-  // 返回值: 操作成功返回true，失败返回false
   bool EraseBlockFromDisk() {
-    // 打开历史文件
+    // Open history file
     CAutoFile fileout = OpenBlockFile(nFile, nBlockPos, "rb+");
     if (!fileout)
       return false;
 
-    // 用空的占位区块覆盖
+    // Overwrite with empty null block
     CBlock block;
     block.SetNull();
     fileout << block;
@@ -934,12 +849,8 @@ public:
     return true;
   }
 
-  // 用于计算中位数时间的窗口大小（取最近11个区块的时间戳）
   enum { nMedianTimeSpan = 11 };
 
-  // 获取过去时间的中位数（用于时间锁验证）
-  // 收集最近11个区块（包括当前）的时间戳，排序后取中间值
-  // 返回值: 过去时间中位数（Unix时间戳）
   int64 GetMedianTimePast() const {
     unsigned int pmedian[nMedianTimeSpan];
     unsigned int *pbegin = &pmedian[nMedianTimeSpan];
@@ -953,9 +864,6 @@ public:
     return pbegin[(pend - pbegin) / 2];
   }
 
-  // 获取当前时间的中位数（用于时间锁验证）
-  // 从当前区块向后遍历到主链末端，取中位数时间
-  // 返回值: 当前区块的预期时间中位数
   int64 GetMedianTime() const {
     const CBlockIndex *pindex = this;
     for (int i = 0; i < nMedianTimeSpan / 2; i++) {
@@ -966,8 +874,6 @@ public:
     return pindex->GetMedianTimePast();
   }
 
-  // 生成区块索引的字符串表示（用于调试和日志）
-  // 返回值: 包含区块索引信息的格式化字符串
   string ToString() const {
     return strprintf("CBlockIndex(nprev=%08x, pnext=%08x, nFile=%d, "
                      "nBlockPos=%-6d nHeight=%d, merkle=%s, hashBlock=%s)",
@@ -976,7 +882,6 @@ public:
                      GetBlockHash().ToString().substr(0, 14).c_str());
   }
 
-  // 打印区块索引信息到控制台（调试用）
   void print() const { printf("%s\n", ToString().c_str()); }
 };
 
