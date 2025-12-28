@@ -4,7 +4,6 @@
 
 #include "cryptopp/sha.h"
 #include "headers.h"
-#include "headers.h"
 
 //
 // Global state
@@ -1425,8 +1424,10 @@ bool CBlock::AcceptBlock() {
   return true;
 }
 
+// 处理从网络接收到的区块
+// 流程：去重验证 → 前序检查 → 存储到磁盘 → 递归处理孤儿区块
 bool ProcessBlock(CNode *pfrom, CBlock *pblock) {
-  // Check for duplicate
+  // 检查是否已有该区块
   uint256 hash = pblock->GetHash();
   if (mapBlockIndex.count(hash))
     return error("ProcessBlock() : already have block %d %s",
@@ -1436,30 +1437,30 @@ bool ProcessBlock(CNode *pfrom, CBlock *pblock) {
     return error("ProcessBlock() : already have block (orphan) %s",
                  hash.ToString().substr(0, 20).c_str());
 
-  // Preliminary checks
+  // 基本验证
   if (!pblock->CheckBlock())
     return error("ProcessBlock() : CheckBlock FAILED");
 
-  // If don't already have its previous block, shunt it off to holding area
-  // until we get it
+  // 检查是否有前序区块
   if (!mapBlockIndex.count(pblock->hashPrevBlock)) {
     printf("ProcessBlock: ORPHAN BLOCK, prev=%s\n",
            pblock->hashPrevBlock.ToString().substr(0, 20).c_str());
+    // 作为孤儿区块保存
     CBlock *pblock2 = new CBlock(*pblock);
     mapOrphanBlocks.insert(make_pair(hash, pblock2));
     mapOrphanBlocksByPrev.insert(make_pair(pblock2->hashPrevBlock, pblock2));
 
-    // Ask this guy to fill in what we're missing
+    // 请求缺失的前序区块
     if (pfrom)
       pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(pblock2));
     return true;
   }
 
-  // Store to disk
+  // 存储到磁盘并添加到区块链
   if (!pblock->AcceptBlock())
     return error("ProcessBlock() : AcceptBlock FAILED");
 
-  // Recursively process any orphan blocks that depended on this one
+  // 递归处理依赖此区块的孤儿区块
   vector<uint256> vWorkQueue;
   vWorkQueue.push_back(hash);
   for (int i = 0; i < vWorkQueue.size(); i++) {
@@ -2609,26 +2610,30 @@ void GenerateBitcoins(bool fGenerate) {
   }
 }
 
+// 挖矿线程入口函数
+// 参数 parg: 线程参数（未使用）
 void ThreadBitcoinMiner(void *parg) {
   try {
-    vnThreadsRunning[3]++;
-    BitcoinMiner();
-    vnThreadsRunning[3]--;
+    vnThreadsRunning[3]++; // 增加运行中的挖矿线程计数
+    BitcoinMiner();        // 调用主挖矿函数
+    vnThreadsRunning[3]--; // 减少线程计数
   } catch (std::exception &e) {
     vnThreadsRunning[3]--;
-    PrintException(&e, "ThreadBitcoinMiner()");
+    PrintException(&e, "ThreadBitcoinMiner()"); // 打印异常信息
   } catch (...) {
     vnThreadsRunning[3]--;
     PrintException(NULL, "ThreadBitcoinMiner()");
   }
+
+  // 更新UI状态和哈希速率统计
   UIThreadCall(boost::bind(CalledSetStatusBar, "", 0));
   nHPSTimerStart = 0;
   if (vnThreadsRunning[3] == 0)
-    dHashesPerSec = 0;
+    dHashesPerSec = 0; // 无挖矿线程时清除哈希速率
+
   printf("ThreadBitcoinMiner exiting, %d threads remaining\n",
          vnThreadsRunning[3]);
 }
-
 #if defined(__GNUC__) && defined(CRYPTOPP_X86_ASM_AVAILABLE)
 void CallCPUID(int in, int &aret, int &cret) {
   int a, c;
@@ -2723,6 +2728,12 @@ inline void SHA256Transform(void *pstate, void *pinput, const void *pinit) {
 // between calls, but periodically or if nNonce is 0xffff0000 or above,
 // the block is rebuilt and nNonce starts over at zero.
 //
+// ScanHash 会扫描非加密码，寻找至少包含一些零位的哈希值。
+// 它处理的是大端序数据。调用者需要进行字节反转操作。
+// 所有输入缓冲区均为 16 字节对齐。nNonce 通常会在调用之间保持不变，
+// 但有时会周期性地更新，或者当 nNonce 为 0xffff0000 或更高时，
+// 将会重新构建区块并从零开始重新计数 nNonce。
+
 unsigned int ScanHash_CryptoPP(char *pmidstate, char *pdata, char *phash1,
                                char *phash, unsigned int &nHashesDone) {
   unsigned int &nNonce = *(unsigned int *)(pdata + 12);
@@ -2770,50 +2781,58 @@ public:
   }
 };
 
+// 创建新的待挖矿区块
+// 流程：创建创币交易 → 收集内存池交易 → 计算手续费 → 设置区块奖励
 CBlock *CreateNewBlock(CReserveKey &reservekey) {
-  CBlockIndex *pindexPrev = pindexBest;
+  CBlockIndex *pindexPrev = pindexBest; // 获取最新区块高度
 
-  // Create new block
+  // 创建新区块对象
+  // auto_ptr 是 C++ 标准库中的智能指针，用于自动管理对象的生命周期
+  // 当 auto_ptr 超出作用域时，会自动调用 delete 释放内存
   auto_ptr<CBlock> pblock(new CBlock());
   if (!pblock.get())
     return NULL;
 
-  // Create coinbase tx
+  // 第一步：创建创币交易（Coinbase Transaction）
+  // 创币交易是区块中的第一笔交易，生成新比特币作为挖矿奖励
   CTransaction txNew;
   txNew.vin.resize(1);
-  txNew.vin[0].prevout.SetNull();
+  txNew.vin[0].prevout.SetNull(); // 创币交易没有输入
   txNew.vout.resize(1);
+  // 输出锁定脚本：只有拥有对应私钥的人才能花费
   txNew.vout[0].scriptPubKey << reservekey.GetReservedKey() << OP_CHECKSIG;
 
-  // Add our coinbase tx as first transaction
+  // 将创币交易添加到区块（作为第一笔交易）
   pblock->vtx.push_back(txNew);
 
-  // Collect memory pool transactions into the block
-  int64 nFees = 0;
+  // 第二步：从内存池收集交易到区块
+  int64 nFees = 0; // 累计交易手续费
   CRITICAL_BLOCK(cs_main)
   CRITICAL_BLOCK(cs_mapTransactions) {
     CTxDB txdb("r");
 
-    // Priority order to process transactions
-    list<COrphan> vOrphan; // list memory doesn't move
+    // 按优先级处理交易
+    list<COrphan> vOrphan; // 孤儿交易列表（依赖未确认交易）
     map<uint256, vector<COrphan *>> mapDependers;
-    multimap<double, CTransaction *> mapPriority;
+    multimap<double, CTransaction *> mapPriority; // 优先级队列
+
+    // 遍历内存池中的所有交易
     for (map<uint256, CTransaction>::iterator mi = mapTransactions.begin();
          mi != mapTransactions.end(); ++mi) {
       CTransaction &tx = (*mi).second;
-      if (tx.IsCoinBase() || !tx.IsFinal())
+      if (tx.IsCoinBase() || !tx.IsFinal()) // 跳过创币交易和未final的交易
         continue;
 
+      // 处理依赖关系
       COrphan *porphan = NULL;
       double dPriority = 0;
       foreach (const CTxIn &txin, tx.vin) {
-        // Read prev transaction
+        // 读取前序交易
         CTransaction txPrev;
         CTxIndex txindex;
         if (!txPrev.ReadFromDisk(txdb, txin.prevout, txindex)) {
-          // Has to wait for dependencies
+          // 前序交易未确认，作为孤儿交易等待
           if (!porphan) {
-            // Use list for automatic deletion
             vOrphan.push_back(COrphan(&tx));
             porphan = &vOrphan.back();
           }
@@ -2823,7 +2842,7 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
         }
         int64 nValueIn = txPrev.vout[txin.prevout.n].nValue;
 
-        // Read block header
+        // 读取区块头计算确认数
         int nConf = 0;
         CBlock block;
         if (block.ReadFromDisk(txindex.pos.nFile, txindex.pos.nBlockPos,
@@ -2837,6 +2856,7 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
           }
         }
 
+        // 优先级 = 币龄 * 金额 / 交易大小
         dPriority += (double)nValueIn * nConf;
 
         if (fDebug && GetBoolArg("-printpriority"))
@@ -2845,13 +2865,14 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
               nValueIn, nConf, dPriority);
       }
 
-      // Priority is sum(valuein * age) / txsize
+      // 计算优先级（币龄/交易大小）
       dPriority /= ::GetSerializeSize(tx, SER_NETWORK);
 
       if (porphan)
         porphan->dPriority = dPriority;
       else
-        mapPriority.insert(make_pair(-dPriority, &(*mi).second));
+        mapPriority.insert(
+            make_pair(-dPriority, &(*mi).second)); // 负值实现最大堆
 
       if (fDebug && GetBoolArg("-printpriority")) {
         printf("priority %-20.1f %s\n%s", dPriority,
@@ -2863,44 +2884,45 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
       }
     }
 
-    // Collect transactions into block
+    // 将交易收集到区块中
     map<uint256, CTxIndex> mapTestPool;
-    uint64 nBlockSize = 1000;
-    int nBlockSigOps = 100;
+    uint64 nBlockSize = 1000; // 区块基础大小
+    int nBlockSigOps = 100;   // 签名操作基础数量
+
+    // 按优先级从高到低处理交易
     while (!mapPriority.empty()) {
-      // Take highest priority transaction off priority queue
+      // 取出最高优先级交易
       double dPriority = -(*mapPriority.begin()).first;
       CTransaction &tx = *(*mapPriority.begin()).second;
       mapPriority.erase(mapPriority.begin());
 
-      // Size limits
+      // 检查区块大小限制
       unsigned int nTxSize = ::GetSerializeSize(tx, SER_NETWORK);
-      if (nBlockSize + nTxSize >= MAX_BLOCK_SIZE_GEN)
+      if (nBlockSize + nTxSize >= MAX_BLOCK_SIZE_GEN) // 1MB限制
         continue;
       int nTxSigOps = tx.GetSigOpCount();
-      if (nBlockSigOps + nTxSigOps >= MAX_BLOCK_SIGOPS)
+      if (nBlockSigOps + nTxSigOps >= MAX_BLOCK_SIGOPS) // 签名操作限制
         continue;
 
-      // Transaction fee required depends on block size
+      // 计算交易手续费
       bool fAllowFree =
           (nBlockSize + nTxSize < 4000 || dPriority > COIN * 144 / 250);
       int64 nMinFee = tx.GetMinFee(nBlockSize, fAllowFree);
 
-      // Connecting shouldn't fail due to dependency on other memory pool
-      // transactions because we're already processing them in order of
-      // dependency
+      // 验证交易输入（连接UTXO）
       map<uint256, CTxIndex> mapTestPoolTmp(mapTestPool);
       if (!tx.ConnectInputs(txdb, mapTestPoolTmp, CDiskTxPos(1, 1, 1),
                             pindexPrev, nFees, false, true, nMinFee))
-        continue;
+        continue; // 验证失败，跳过此交易
+
       swap(mapTestPool, mapTestPoolTmp);
 
-      // Added
+      // 交易有效，添加到区块
       pblock->vtx.push_back(tx);
       nBlockSize += nTxSize;
       nBlockSigOps += nTxSigOps;
 
-      // Add transactions that depend on this one to the priority queue
+      // 将依赖此交易的孤儿交易加入队列
       uint256 hash = tx.GetHash();
       if (mapDependers.count(hash)) {
         foreach (COrphan *porphan, mapDependers[hash]) {
@@ -2913,14 +2935,18 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
       }
     }
   }
+
+  // 第三步：设置创币交易输出金额
+  // 金额 = 出块奖励 + 所有交易手续费
   pblock->vtx[0].vout[0].nValue = GetBlockValue(pindexPrev->nHeight + 1, nFees);
 
-  // Fill in header
-  pblock->hashPrevBlock = pindexPrev->GetBlockHash();
-  pblock->hashMerkleRoot = pblock->BuildMerkleTree();
-  pblock->nTime = max(pindexPrev->GetMedianTimePast() + 1, GetAdjustedTime());
-  pblock->nBits = GetNextWorkRequired(pindexPrev);
-  pblock->nNonce = 0;
+  // 第四步：填充区块头
+  pblock->hashPrevBlock = pindexPrev->GetBlockHash(); // 设置前一区块哈希
+  pblock->hashMerkleRoot = pblock->BuildMerkleTree(); // 构建梅克尔树
+  pblock->nTime =
+      max(pindexPrev->GetMedianTimePast() + 1, GetAdjustedTime()); // 时间戳
+  pblock->nBits = GetNextWorkRequired(pindexPrev);                 // 难度目标
+  pblock->nNonce = 0; // 随机数从0开始
 
   return pblock.release();
 }
@@ -2979,14 +3005,18 @@ void FormatHashBuffers(CBlock *pblock, char *pmidstate, char *pdata,
   memcpy(phash1, &tmp.hash1, 64);
 }
 
+// 验证工作量证明并提交区块
+// 流程：双重验证 → 保留密钥 → 广播区块
 bool CheckWork(CBlock *pblock, CReserveKey &reservekey) {
-  uint256 hash = pblock->GetHash();
-  uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
+  uint256 hash = pblock->GetHash(); // 获取区块哈希
+  uint256 hashTarget =
+      CBigNum().SetCompact(pblock->nBits).getuint256(); // 难度目标
 
+  // 再次验证工作量证明
   if (hash > hashTarget)
     return false;
 
-  //// debug print
+  // 打印成功信息
   printf("BitcoinMiner:\n");
   printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n",
          hash.GetHex().c_str(), hashTarget.GetHex().c_str());
@@ -2994,44 +3024,51 @@ bool CheckWork(CBlock *pblock, CReserveKey &reservekey) {
   printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
   printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
 
-  // Found a solution
+  // 关键验证：确保父区块还是最佳链
   CRITICAL_BLOCK(cs_main) {
     if (pblock->hashPrevBlock != hashBestChain)
       return error("BitcoinMiner : generated block is stale");
 
-    // Remove key from key pool
+    // 销毁预留密钥（创币交易输出已生效）
     reservekey.KeepKey();
 
-    // Track how many getdata requests this block gets
+    // 统计区块请求次数
     CRITICAL_BLOCK(cs_mapRequestCount)
     mapRequestCount[pblock->GetHash()] = 0;
 
-    // Process this block the same as if we had received it from another node
+    // 像接收其他节点区块一样处理此区块
     if (!ProcessBlock(NULL, pblock))
       return error("BitcoinMiner : ProcessBlock, block not accepted");
   }
 
-  Sleep(2000);
+  Sleep(2000); // 等待2秒再继续挖矿
   return true;
 }
 
+// 主挖矿函数
+// 流程：创建区块 → 准备哈希缓冲区 → 循环扫描随机数 → 验证并提交
 void BitcoinMiner() {
   printf("BitcoinMiner started\n");
-  SetThreadPriority(THREAD_PRIORITY_LOWEST);
+  SetThreadPriority(THREAD_PRIORITY_LOWEST); // 设置低优先级，避免影响其他操作
+
+  // 检测CPU是否支持128位SSE2（用于加速SHA256计算）
   bool f4WaySSE2 = Detect128BitSSE2();
   if (mapArgs.count("-4way"))
     f4WaySSE2 = GetBoolArg(mapArgs["-4way"]);
 
-  // Each thread has its own key and counter
-  CReserveKey reservekey;
-  unsigned int nExtraNonce = 0;
-  int64 nPrevTime = 0;
+  // 每个挖矿线程有独立的密钥和额外随机数
+  CReserveKey reservekey;       // 预留密钥（用于创币交易）
+  unsigned int nExtraNonce = 0; // 额外随机数（扩展搜索空间）
+  int64 nPrevTime = 0;          // 上次时间（用于检测时间变化）
 
+  // 主循环：持续挖矿直到被停止
   while (fGenerateBitcoins) {
     if (AffinityBugWorkaround(ThreadBitcoinMiner))
       return;
     if (fShutdown)
       return;
+
+    // 等待网络连接同步完成
     while (vNodes.empty() || IsInitialBlockDownload()) {
       Sleep(1000);
       if (fShutdown)
@@ -3041,80 +3078,90 @@ void BitcoinMiner() {
     }
 
     //
-    // Create new block
+    // 第一步：创建新区块
     //
     unsigned int nTransactionsUpdatedLast = nTransactionsUpdated;
-    CBlockIndex *pindexPrev = pindexBest;
+    CBlockIndex *pindexPrev = pindexBest; // 获取最新区块
 
+    // 创建包含交易的新区块
     auto_ptr<CBlock> pblock(CreateNewBlock(reservekey));
     if (!pblock.get())
       return;
+
+    // 更新额外随机数（改变创币交易的哈希，从而改变梅克尔根）
     IncrementExtraNonce(pblock.get(), pindexPrev, nExtraNonce, nPrevTime);
 
     printf("Running BitcoinMiner with %d transactions in block\n",
            pblock->vtx.size());
 
     //
-    // Prebuild hash buffers
+    // 第二步：准备哈希计算缓冲区
     //
     char pmidstatebuf[32 + 16];
-    char *pmidstate = alignup<16>(pmidstatebuf);
+    char *pmidstate = alignup<16>(pmidstatebuf); // 中间状态缓冲区
     char pdatabuf[128 + 16];
-    char *pdata = alignup<16>(pdatabuf);
+    char *pdata = alignup<16>(pdatabuf); // 数据缓冲区
     char phash1buf[64 + 16];
-    char *phash1 = alignup<16>(phash1buf);
+    char *phash1 = alignup<16>(phash1buf); // 哈希结果缓冲区
 
+    // 格式化哈希缓冲区
     FormatHashBuffers(pblock.get(), pmidstate, pdata, phash1);
 
+    // 获取区块时间戳和随机数字段的引用（用于快速更新）
     unsigned int &nBlockTime = *(unsigned int *)(pdata + 64 + 4);
     unsigned int &nBlockNonce = *(unsigned int *)(pdata + 64 + 12);
 
     //
-    // Search
+    // 第三步：扫描随机数（工作量证明计算）
     //
-    int64 nStart = GetTime();
-    uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
+    int64 nStart = GetTime(); // 记录开始时间
+    uint256 hashTarget =
+        CBigNum().SetCompact(pblock->nBits).getuint256(); // 难度目标
     uint256 hashbuf[2];
-    uint256 &hash = *alignup<16>(hashbuf);
+    uint256 &hash = *alignup<16>(hashbuf); // 哈希结果
+
     loop {
-      unsigned int nHashesDone = 0;
-      unsigned int nNonceFound;
+      unsigned int nHashesDone = 0; // 本轮完成的哈希数量
+      unsigned int nNonceFound;     // 找到的随机数
 
 #ifdef FOURWAYSSE2
       if (f4WaySSE2)
-        // tcatm's 4-way 128-bit SSE2 SHA-256
+        // 使用4-way SSE2加速（如果可用）
         nNonceFound = ScanHash_4WaySSE2(pmidstate, pdata + 64, phash1,
                                         (char *)&hash, nHashesDone);
       else
 #endif
-        // Crypto++ SHA-256
+        // 使用Crypto++库进行SHA256计算
         nNonceFound = ScanHash_CryptoPP(pmidstate, pdata + 64, phash1,
                                         (char *)&hash, nHashesDone);
 
-      // Check if something found
+      // 检查是否找到有效随机数
       if (nNonceFound != -1) {
+        // 字节序转换（比特币使用大端序）
         for (int i = 0; i < sizeof(hash) / 4; i++)
           ((unsigned int *)&hash)[i] = ByteReverse(((unsigned int *)&hash)[i]);
 
+        // 核心验证：哈希值必须小于等于目标值
         if (hash <= hashTarget) {
-          // Found a solution
+          // 找到有效工作量证明！
           pblock->nNonce = ByteReverse(nNonceFound);
           assert(hash == pblock->GetHash());
 
-          SetThreadPriority(THREAD_PRIORITY_NORMAL);
-          CheckWork(pblock.get(), reservekey);
-          SetThreadPriority(THREAD_PRIORITY_LOWEST);
+          SetThreadPriority(THREAD_PRIORITY_NORMAL); // 提高优先级处理
+          CheckWork(pblock.get(), reservekey);       // 验证并提交区块
+          SetThreadPriority(THREAD_PRIORITY_LOWEST); // 恢复低优先级
           break;
         }
       }
 
-      // Meter hashes/sec
+      // 统计哈希速率（每4秒更新一次UI）
       static int64 nHashCounter;
       if (nHPSTimerStart == 0) {
         nHPSTimerStart = GetTimeMillis();
         nHashCounter = 0;
       } else
         nHashCounter += nHashesDone;
+
       if (GetTimeMillis() - nHPSTimerStart > 4000) {
         static CCriticalSection cs;
         CRITICAL_BLOCK(cs) {
@@ -3126,6 +3173,7 @@ void BitcoinMiner() {
             string strStatus =
                 strprintf("    %.0f khash/s", dHashesPerSec / 1000.0);
             UIThreadCall(boost::bind(CalledSetStatusBar, strStatus, 0));
+            // 每30分钟打印一次日志
             static int64 nLogTime;
             if (GetTime() - nLogTime > 30 * 60) {
               nLogTime = GetTime();
@@ -3137,7 +3185,7 @@ void BitcoinMiner() {
         }
       }
 
-      // Check for stop or if block needs to be rebuilt
+      // 检查是否需要退出或重建区块
       if (fShutdown)
         return;
       if (!fGenerateBitcoins)
@@ -3145,16 +3193,16 @@ void BitcoinMiner() {
       if (fLimitProcessors && vnThreadsRunning[3] > nLimitProcessors)
         return;
       if (vNodes.empty())
-        break;
+        break; // 断开网络，停止挖矿
       if (nBlockNonce >= 0xffff0000)
-        break;
+        break; // 随机数溢出，需要更新时间戳
       if (nTransactionsUpdated != nTransactionsUpdatedLast &&
           GetTime() - nStart > 60)
-        break;
+        break; // 交易池变化超过60秒，重建区块
       if (pindexPrev != pindexBest)
-        break;
+        break; // 区块链分叉，重建区块
 
-      // Update nTime every few seconds
+      // 每几秒更新一次时间戳（影响区块头）
       pblock->nTime =
           max(pindexPrev->GetMedianTimePast() + 1, GetAdjustedTime());
       nBlockTime = ByteReverse(pblock->nTime);
