@@ -2612,6 +2612,8 @@ void GenerateBitcoins(bool fGenerate) {
 
 // 挖矿线程入口函数
 // 参数 parg: 线程参数（未使用）
+// 功能: 启动比特币挖矿线程，增加运行中的挖矿线程计数，调用主挖矿函数，
+//       最后减少线程计数。
 void ThreadBitcoinMiner(void *parg) {
   try {
     vnThreadsRunning[3]++; // 增加运行中的挖矿线程计数
@@ -2634,6 +2636,7 @@ void ThreadBitcoinMiner(void *parg) {
   printf("ThreadBitcoinMiner exiting, %d threads remaining\n",
          vnThreadsRunning[3]);
 }
+
 #if defined(__GNUC__) && defined(CRYPTOPP_X86_ASM_AVAILABLE)
 void CallCPUID(int in, int &aret, int &cret) {
   int a, c;
