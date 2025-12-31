@@ -1316,43 +1316,71 @@ bool CBlock::AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos) {
   return true;
 }
 
+// 区块完整性验证方法
+// 该方法执行区块的基础验证，检查区块结构和内容的合法性
+// 验证过程独立于区块链上下文，可在将区块保存为孤儿区块之前进行验证
+// 这是区块接受的第一道防线，确保只处理结构正确的基本区块
 bool CBlock::CheckBlock() const {
-  // These are checks that are independent of context
-  // that can be verified before saving an orphan block.
+  // 这些检查项独立于区块链上下文，在保存孤儿区块之前就可以验证
 
-  // Size limits
+  // 检查项1：区块大小限制验证
+  // 确保区块不会过大，避免网络传输和存储问题
+  // 检查内容包括：
+  // - 交易数量不能为空且不能超过最大交易数限制
+  // - 序列化后的区块大小不能超过1MB限制
   if (vtx.empty() || vtx.size() > MAX_BLOCK_SIZE ||
       ::GetSerializeSize(*this, SER_NETWORK) > MAX_BLOCK_SIZE)
     return error("CheckBlock() : size limits failed");
 
-  // Check proof of work matches claimed amount
+  // 检查项2：工作量证明验证
+  // 验证区块的哈希值是否满足难度要求，确保挖矿工作的真实性
+  // 这是比特币共识机制的核心，防止虚假区块攻击
+  // 参数：GetHash()获取区块哈希值，nBits为难度目标压缩表示
   if (!CheckProofOfWork(GetHash(), nBits))
     return error("CheckBlock() : proof of work failed");
 
-  // Check timestamp
+  // 检查项3：时间戳合理性验证
+  // 确保区块时间戳不会太超前，避免时间操纵攻击
+  // 当前时间 + 2小时作为上限，给网络时钟偏差预留余量
   if (GetBlockTime() > GetAdjustedTime() + 2 * 60 * 60)
     return error("CheckBlock() : block timestamp too far in the future");
 
-  // First transaction must be coinbase, the rest must not be
+  // 检查项4：创币交易验证
+  // 确保区块包含且只包含一个创币交易，这是比特币区块的标准结构
+  // 创币交易（Coinbase Transaction）是区块中生成新比特币的特殊交易
+  
+  // 验证第一笔交易必须是创币交易
   if (vtx.empty() || !vtx[0].IsCoinBase())
     return error("CheckBlock() : first tx is not coinbase");
+  
+  // 验证除第一笔交易外，其他交易都不能是创币交易
+  // 防止创建多个创币交易来生成额外比特币
   for (int i = 1; i < vtx.size(); i++)
     if (vtx[i].IsCoinBase())
       return error("CheckBlock() : more than one coinbase");
 
-  // Check transactions
+  // 检查项5：交易内容验证
+  // 验证区块中每笔交易的基本结构合法性
+  // 包括签名验证、输入输出检查、金额验证等交易级别的安全检查
   foreach (const CTransaction &tx, vtx)
     if (!tx.CheckTransaction())
       return error("CheckBlock() : CheckTransaction failed");
 
-  // Check that it's not full of nonstandard transactions
+  // 检查项6：签名操作数量限制
+  // 验证区块中的签名操作总数不超过限制，防止区块被恶意构造得过于复杂
+  // 限制签名操作数量可以防止DoS攻击和区块处理性能问题
+  // 这里是检查区块中是否包含过多的非标准交易或复杂的签名操作
   if (GetSigOpCount() > MAX_BLOCK_SIGOPS)
     return error("CheckBlock() : too many nonstandard transactions");
 
-  // Check merkleroot
+  // 检查项7：梅克尔根验证
+  // 验证区块头中存储的梅克尔根哈希与实际计算的梅克尔树根哈希是否一致
+  // 这是确保区块中所有交易完整性和正确性的关键验证
+  // 如果不一致，说明区块中的交易数据被篡改或构造错误
   if (hashMerkleRoot != BuildMerkleTree())
     return error("CheckBlock() : hashMerkleRoot mismatch");
 
+  // 所有验证通过，区块结构合法
   return true;
 }
 
@@ -2800,8 +2828,8 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
   // 创币交易是区块中的第一笔交易，生成新比特币作为挖矿奖励
   CTransaction txNew;
   txNew.vin.resize(1);
-  txNew.vin[0].prevout.SetNull(); // 创币交易没有输入
-  txNew.vout.resize(1);
+  txNew.vin[0].prevout.SetNull(); // 创币交易是没有输入的
+  txNew.vout.resize(1);           // 创币交易只有一个输出
   // 输出锁定脚本：只有拥有对应私钥的人才能花费
   txNew.vout[0].scriptPubKey << reservekey.GetReservedKey() << OP_CHECKSIG;
 
@@ -2814,7 +2842,7 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
   CRITICAL_BLOCK(cs_mapTransactions) {
     CTxDB txdb("r");
 
-    // 按优先级处理交易
+    // 按优先级处理交易（高优先级交易优先）
     list<COrphan> vOrphan; // 孤儿交易列表（依赖未确认交易）
     map<uint256, vector<COrphan *>> mapDependers;
     multimap<double, CTransaction *> mapPriority; // 优先级队列
@@ -2889,8 +2917,8 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
 
     // 将交易收集到区块中
     map<uint256, CTxIndex> mapTestPool;
-    uint64 nBlockSize = 1000; // 区块基础大小
-    int nBlockSigOps = 100;   // 签名操作基础数量
+    uint64 nBlockSize = 1000; // 收集交易限制：区块基础大小
+    int nBlockSigOps = 100;   // 收集交易限制：签名操作基础数量
 
     // 按优先级从高到低处理交易
     while (!mapPriority.empty()) {
@@ -2947,9 +2975,9 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
   pblock->hashPrevBlock = pindexPrev->GetBlockHash(); // 设置前一区块哈希
   pblock->hashMerkleRoot = pblock->BuildMerkleTree(); // 构建梅克尔树
   pblock->nTime =
-      max(pindexPrev->GetMedianTimePast() + 1, GetAdjustedTime()); // 时间戳
-  pblock->nBits = GetNextWorkRequired(pindexPrev);                 // 难度目标
-  pblock->nNonce = 0; // 随机数从0开始
+      max(pindexPrev->GetMedianTimePast() + 1, GetAdjustedTime()); // 设置时间戳
+  pblock->nBits = GetNextWorkRequired(pindexPrev); // 设置难度目标
+  pblock->nNonce = 0;                              // 随机数从0开始
 
   return pblock.release();
 }
@@ -3051,7 +3079,7 @@ bool CheckWork(CBlock *pblock, CReserveKey &reservekey) {
 // 主挖矿函数
 // 流程：创建区块 → 准备哈希缓冲区 → 循环扫描随机数 → 验证并提交
 void BitcoinMiner() {
-  printf("BitcoinMiner started\n");
+  printf("BitcoinMiner started\n");          // good luck!
   SetThreadPriority(THREAD_PRIORITY_LOWEST); // 设置低优先级，避免影响其他操作
 
   // 检测CPU是否支持128位SSE2（用于加速SHA256计算）
@@ -3066,12 +3094,14 @@ void BitcoinMiner() {
 
   // 主循环：持续挖矿直到被停止
   while (fGenerateBitcoins) {
+    // 线程检查？没看懂是做什么的
     if (AffinityBugWorkaround(ThreadBitcoinMiner))
       return;
+    // 关闭信号检查
     if (fShutdown)
       return;
 
-    // 等待网络连接同步完成
+    // 等待网络连接同步完成，必须完成同步才能挖矿
     while (vNodes.empty() || IsInitialBlockDownload()) {
       Sleep(1000);
       if (fShutdown)
@@ -3081,17 +3111,19 @@ void BitcoinMiner() {
     }
 
     //
-    // 第一步：创建新区块
+    // 第一步：创建新区块，基础信息（版本、父块哈希、时间戳、难度目标）
     //
     unsigned int nTransactionsUpdatedLast = nTransactionsUpdated;
     CBlockIndex *pindexPrev = pindexBest; // 获取最新区块
 
-    // 创建包含交易的新区块
+    // 创建包含交易的新区块，此时nonce还为0
+    // 每次创建新区块时，都需要更新额外随机数，并不是等确认好了基础信息再更新Nonce，这里是之前很大的误解
+    // 你看CreateNewBlock这个函数的调用时写在while循环中的，而不是while循环之外
     auto_ptr<CBlock> pblock(CreateNewBlock(reservekey));
     if (!pblock.get())
       return;
 
-    // 更新额外随机数（改变创币交易的哈希，从而改变梅克尔根）
+    // 更新额外随机数
     IncrementExtraNonce(pblock.get(), pindexPrev, nExtraNonce, nPrevTime);
 
     printf("Running BitcoinMiner with %d transactions in block\n",
@@ -3119,7 +3151,9 @@ void BitcoinMiner() {
     //
     int64 nStart = GetTime(); // 记录开始时间
     uint256 hashTarget =
-        CBigNum().SetCompact(pblock->nBits).getuint256(); // 难度目标
+        CBigNum()
+            .SetCompact(pblock->nBits)
+            .getuint256(); // 难度目标，nBits是难度目标的紧凑表示,这里转化为256位整数Target
     uint256 hashbuf[2];
     uint256 &hash = *alignup<16>(hashbuf); // 哈希结果
 
@@ -3144,7 +3178,7 @@ void BitcoinMiner() {
         for (int i = 0; i < sizeof(hash) / 4; i++)
           ((unsigned int *)&hash)[i] = ByteReverse(((unsigned int *)&hash)[i]);
 
-        // 核心验证：哈希值必须小于等于目标值
+        // 核心验证：哈希值必须小于等于目标值（满足难度目标）
         if (hash <= hashTarget) {
           // 找到有效工作量证明！
           pblock->nNonce = ByteReverse(nNonceFound);
@@ -3157,6 +3191,7 @@ void BitcoinMiner() {
         }
       }
 
+      // 后面就是一些收尾的工作了
       // 统计哈希速率（每4秒更新一次UI）
       static int64 nHashCounter;
       if (nHPSTimerStart == 0) {
