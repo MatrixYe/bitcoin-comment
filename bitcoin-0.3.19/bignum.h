@@ -248,17 +248,17 @@ public:
         return vch;
     }
 
-    CBigNum& SetCompact(unsigned int nCompact)
-    {
-        unsigned int nSize = nCompact >> 24;
-        std::vector<unsigned char> vch(4 + nSize);
-        vch[3] = nSize;
-        if (nSize >= 1) vch[4] = (nCompact >> 16) & 0xff;
-        if (nSize >= 2) vch[5] = (nCompact >> 8) & 0xff;
-        if (nSize >= 3) vch[6] = (nCompact >> 0) & 0xff;
-        BN_mpi2bn(&vch[0], vch.size(), this);
-        return *this;
-    }
+CBigNum& SetCompact(unsigned int nCompact)
+{
+    unsigned int nSize = nCompact >> 24;  // 提取指数部分（高24位）
+    std::vector<unsigned char> vch(4 + nSize);  // 创建足够大的缓冲区
+    vch[3] = nSize;  // 设置长度信息
+    if (nSize >= 1) vch[4] = (nCompact >> 16) & 0xff;  // 尾数第1字节
+    if (nSize >= 2) vch[5] = (nCompact >> 8) & 0xff;   // 尾数第2字节
+    if (nSize >= 3) vch[6] = (nCompact >> 0) & 0xff;   // 尾数第3字节
+    BN_mpi2bn(&vch[0], vch.size(), this);  // 转换为大数格式
+    return *this;
+}
 
     unsigned int GetCompact() const
     {

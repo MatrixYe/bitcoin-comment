@@ -196,36 +196,54 @@ void WalletUpdateSpent(const COutPoint &prevout) {
 
 //////////////////////////////////////////////////////////////////////////////
 //
-// mapOrphanTransactions
+// 孤儿交易处理机制
+// 孤儿交易是指其依赖的前序交易尚未收到的交易
+// 这种机制确保在网络延迟情况下，交易依赖关系能够得到正确处理
 //
 
+// 添加孤儿交易到内存池
+// 当接收到一个交易但其依赖的前序交易尚未收到时，将此交易标记为孤儿交易
+// 设计目的：解决交易依赖关系中的网络延迟问题，保证交易传播的完整性
 void AddOrphanTx(const CDataStream &vMsg) {
   CTransaction tx;
   CDataStream(vMsg) >> tx;
   uint256 hash = tx.GetHash();
   if (mapOrphanTransactions.count(hash))
-    return;
+    return; // 如果已经存在相同的孤儿交易，则忽略
+
+  // 创建交易数据的副本并存储到孤儿交易映射中
   CDataStream *pvMsg = mapOrphanTransactions[hash] = new CDataStream(vMsg);
+
+  // 建立反向依赖关系映射
+  // 记录此孤儿交易依赖的每一个前序交易哈希
   foreach (const CTxIn &txin, tx.vin)
     mapOrphanTransactionsByPrev.insert(make_pair(txin.prevout.hash, pvMsg));
 }
 
+// 从孤儿交易池中删除指定的孤儿交易
+// 当孤儿交易被成功处理或确认不再需要时调用此函数
+// 设计目的：清理孤儿交易池，防止内存泄漏和无效数据积累
 void EraseOrphanTx(uint256 hash) {
   if (!mapOrphanTransactions.count(hash))
     return;
+
   const CDataStream *pvMsg = mapOrphanTransactions[hash];
   CTransaction tx;
   CDataStream(*pvMsg) >> tx;
+
+  // 从反向依赖关系映射中删除此孤儿交易的所有引用
   foreach (const CTxIn &txin, tx.vin) {
     for (multimap<uint256, CDataStream *>::iterator mi =
              mapOrphanTransactionsByPrev.lower_bound(txin.prevout.hash);
          mi != mapOrphanTransactionsByPrev.upper_bound(txin.prevout.hash);) {
       if ((*mi).second == pvMsg)
-        mapOrphanTransactionsByPrev.erase(mi++);
+        mapOrphanTransactionsByPrev.erase(mi++); // 安全删除迭代器指向的元素
       else
         mi++;
     }
   }
+
+  // 释放内存并从主映射中删除
   delete pvMsg;
   mapOrphanTransactions.erase(hash);
 }
@@ -759,13 +777,20 @@ bool CBlock::ReadFromDisk(const CBlockIndex *pindex, bool fReadTransactions) {
   return true;
 }
 
+// 获取孤儿链的根区块哈希
+// 该函数沿着孤儿区块的前序链接一直回溯，直到找到没有前序区块的根区块
+// 这是孤儿链中最早创建的区块，代表了整个孤儿链的起点
+// 设计目的：在处理孤儿区块时，能够找到整个链的起始点，便于向网络请求完整的链
 uint256 GetOrphanRoot(const CBlock *pblock) {
-  // Work back to the first block in the orphan chain
+  // 沿着前序区块回溯到孤儿链的起点
+  // mapOrphanBlocks中存储着所有孤儿区块，通过hashPrevBlock链接起来
   while (mapOrphanBlocks.count(pblock->hashPrevBlock))
     pblock = mapOrphanBlocks[pblock->hashPrevBlock];
   return pblock->GetHash();
 }
-
+// 计算区块奖励值
+// 该函数根据区块高度和交易手续费计算当前区块的奖励值
+// 设计目的：根据比特币的奖励机制，动态调整新区块的奖励值
 int64 GetBlockValue(int nHeight, int64 nFees) {
   int64 nSubsidy = 50 * COIN;
 
@@ -775,44 +800,98 @@ int64 GetBlockValue(int nHeight, int64 nFees) {
   return nSubsidy + nFees;
 }
 
+// 计算下一个区块的难度目标（nBits）
+// 该函数根据当前区块链的状态，动态调整下一个区块的难度目标
+// 设计目的：确保比特币网络的安全性和稳定性，防止恶意攻击
+// 获取下一个工作难度要求（难度调整算法）
+// 该函数实现比特币的核心难度调整机制，确保平均出块时间维持在10分钟左右
+// 算法每2016个区块（约14天）执行一次，根据网络算力变化动态调整挖矿难度
 unsigned int GetNextWorkRequired(const CBlockIndex *pindexLast) {
+  // 难度调整相关常量定义
+  
+  // 目标时间跨度：14天（以秒为单位）
+  // 这是比特币网络设计的目标周期，用于衡量网络算力变化
   const int64 nTargetTimespan = 14 * 24 * 60 * 60; // two weeks
+  
+  // 目标出块间隔：10分钟（以秒为单位）
+  // 这是比特币网络设计的目标出块时间
   const int64 nTargetSpacing = 10 * 60;
+  
+  // 难度调整周期：2016个区块
+  // 比特币每2016个区块（约14天）调整一次难度
   const int64 nInterval = nTargetTimespan / nTargetSpacing;
 
-  // Genesis block
+  // 特殊情况处理：创世区块
+  // 如果没有前一个区块（创世区块），返回系统的最大难度限制
+  // 创世区块是区块链的起始点，没有可参考的前序区块
   if (pindexLast == NULL)
     return bnProofOfWorkLimit.GetCompact();
 
-  // Only change once per interval
+  // 检查是否需要调整难度
+  // 只有当新区块编号是调整周期的整数倍时才调整难度
+  // 例如：第2016、4032、6048...个区块会触发难度调整
   if ((pindexLast->nHeight + 1) % nInterval != 0)
-    return pindexLast->nBits;
+    return pindexLast->nBits; // 不需要调整，返回当前难度
 
-  // Go back by what we want to be 14 days worth of blocks
+  // 步骤1：计算过去一个难度周期内实际生成区块的时间
+  // 通过遍历区块链，找到2016个区块前的区块作为起始点
+  
+  // 初始化指针：从当前区块开始向前遍历
   const CBlockIndex *pindexFirst = pindexLast;
+  
+  // 向后遍历nInterval-1个区块（约14天的区块）
+  // 循环结束后，pindexFirst指向2016个区块前的区块
   for (int i = 0; pindexFirst && i < nInterval - 1; i++)
     pindexFirst = pindexFirst->pprev;
+  
+  // 确保pindexFirst不为空（断言用于调试阶段）
   assert(pindexFirst);
 
-  // Limit adjustment step
+  // 步骤2：计算实际时间跨度
+  // 计算最近2016个区块实际生成所需的时间
+  
+  // 实际时间跨度 = 最后一个区块时间 - 第一个区块时间
+  // 这里使用GetBlockTime()获取区块的时间戳
   int64 nActualTimespan =
       pindexLast->GetBlockTime() - pindexFirst->GetBlockTime();
+      
   printf("  nActualTimespan = %" PRI64d "  before bounds\n", nActualTimespan);
+  
+  // 步骤3：限制实际时间跨度的范围
+  // 防止难度调整过度激进，保持网络稳定性
+  
+  // 下限：实际时间不能小于目标时间的1/4
+  // 如果实际时间过短，说明算力增长过快，需要限制难度增加的幅度
   if (nActualTimespan < nTargetTimespan / 4)
     nActualTimespan = nTargetTimespan / 4;
+    
+  // 上限：实际时间不能大于目标时间的4倍
+  // 如果实际时间过长，说明算力下降过快，需要限制难度降低的幅度
   if (nActualTimespan > nTargetTimespan * 4)
     nActualTimespan = nTargetTimespan * 4;
 
-  // Retarget
+  // 步骤4：计算新的难度目标值（难度调整的核心算法）
+  // 使用比例调整法：根据实际时间与目标时间的比率调整难度
+  
+  // 创建大数对象，用于高精度计算
   CBigNum bnNew;
+  
+  // 将当前难度值转换为大数
   bnNew.SetCompact(pindexLast->nBits);
-  bnNew *= nActualTimespan;
-  bnNew /= nTargetTimespan;
+  
+  // 调整公式：新难度 = 当前难度 * (实际时间 / 目标时间)
+  // 如果实际时间大于目标时间（出块慢），则增大难度目标值（降低难度）
+  // 如果实际时间小于目标时间（出块快），则减小难度目标值（提高难度）
+  bnNew *= nActualTimespan; // 乘以实际时间跨度
+  bnNew /= nTargetTimespan; // 除以目标时间跨度
 
+  // 步骤5：确保新难度不超过系统最大难度限制
+  // 防止难度调整过度，保持网络安全性
   if (bnNew > bnProofOfWorkLimit)
     bnNew = bnProofOfWorkLimit;
 
-  /// debug print
+  /// 调试信息输出
+  // 打印难度调整的详细信息，便于监控和调试
   printf("GetNextWorkRequired RETARGET\n");
   printf("nTargetTimespan = %" PRI64d "    nActualTimespan = %" PRI64d "\n",
          nTargetTimespan, nActualTimespan);
@@ -822,9 +901,12 @@ unsigned int GetNextWorkRequired(const CBlockIndex *pindexLast) {
   printf("After:  %08x  %s\n", bnNew.GetCompact(),
          bnNew.getuint256().ToString().c_str());
 
+  // 返回新难度的紧凑编码格式
   return bnNew.GetCompact();
 }
-
+// 验证区块的工作量证明（Proof of Work）
+// 该函数检查区块的哈希值是否小于等于目标值（nBits）
+// 设计目的：确保区块被挖掘出，符合比特币的工作量证明机制
 bool CheckProofOfWork(uint256 hash, unsigned int nBits) {
   CBigNum bnTarget;
   bnTarget.SetCompact(nBits);
@@ -839,7 +921,9 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits) {
 
   return true;
 }
-
+// 检查是否正在进行初始区块链下载（Initial Block Download, IBD）
+// 该函数根据当前区块链状态和高度，判断是否正在进行IBD
+// 设计目的：在IBD过程中，需要禁用一些功能，如交易验证、挖矿等
 bool IsInitialBlockDownload() {
   if (pindexBest == NULL || (!fTestNet && nBestHeight < 74000))
     return true;
@@ -852,7 +936,9 @@ bool IsInitialBlockDownload() {
   return (GetTime() - nLastUpdate < 10 &&
           pindexBest->GetBlockTime() < GetTime() - 24 * 60 * 60);
 }
-
+// 处理无效区块链发现事件
+// 该函数在发现新的无效区块链时调用
+// 设计目的：及时发现并处理无效的区块链，保持网络的健康运行
 void InvalidChainFound(CBlockIndex *pindexNew) {
   if (pindexNew->bnChainWork > bnBestInvalidWork) {
     bnBestInvalidWork = pindexNew->bnChainWork;
@@ -872,55 +958,72 @@ void InvalidChainFound(CBlockIndex *pindexNew) {
            "upgrade.\n");
 }
 
+// 交易输入断开连接函数
+// 该函数执行与ConnectInputs相反的操作，用于撤销交易的输入连接
+// 在区块链重组（reorg）或区块断开连接时调用
+// 设计目的：清理交易对UTXO集的修改，恢复到交易前的状态
 bool CTransaction::DisconnectInputs(CTxDB &txdb) {
-  // Relinquish previous transactions' spent pointers
+  // 释放前一个交易已花费输出的控制权
+  // 与ConnectInputs相反，这里需要将已花费的输出恢复为未花费状态
   if (!IsCoinBase()) {
     foreach (const CTxIn &txin, vin) {
-      COutPoint prevout = txin.prevout;
+      COutPoint prevout = txin.prevout; // 当前输入引用的前一个输出
 
-      // Get prev txindex from disk
+      // 从磁盘中获取前一个输出的交易索引信息
+      // 这里需要从数据库读取，因为之前ConnectInputs可能已经将状态写入磁盘
       CTxIndex txindex;
       if (!txdb.ReadTxIndex(prevout.hash, txindex))
         return error("DisconnectInputs() : ReadTxIndex failed");
 
+      // 验证输出索引的有效性
       if (prevout.n >= txindex.vSpent.size())
         return error("DisconnectInputs() : prevout.n out of range");
 
-      // Mark outpoint as not spent
+      // 将输出标记为未花费状态
+      // SetNull()函数将vSpent数组中对应位置的标记清除，表示该输出现在可以再次被花费
       txindex.vSpent[prevout.n].SetNull();
 
-      // Write back
+      // 写回更新后的交易索引
+      // 将恢复后的状态保存到数据库中
       if (!txdb.UpdateTxIndex(prevout.hash, txindex))
         return error("DisconnectInputs() : UpdateTxIndex failed");
     }
   }
 
-  // Remove transaction from index
+  // 从索引中移除交易
+  // 删除当前交易在磁盘索引中的记录
   if (!txdb.EraseTxIndex(*this))
     return error("DisconnectInputs() : EraseTxPos failed");
 
   return true;
 }
 
+// 交易输入连接验证函数
+// 该函数是比特币交易验证的核心，负责验证当前交易的输入是否有效
+// 并建立交易之间的连接关系，是UTXO模型实现的关键函数
+// 设计目的：确保每个交易都引用有效的未花费输出，防止双重支付
 bool CTransaction::ConnectInputs(CTxDB &txdb,
                                  map<uint256, CTxIndex> &mapTestPool,
                                  CDiskTxPos posThisTx, CBlockIndex *pindexBlock,
                                  int64 &nFees, bool fBlock, bool fMiner,
                                  int64 nMinFee) {
-  // Take over previous transactions' spent pointers
+  // 获取前一个交易已花费输出的控制权
+  // 这是交易验证的第一步，需要检查每个输入引用的前一个输出是否存在且未被花费
   if (!IsCoinBase()) {
-    int64 nValueIn = 0;
+    int64 nValueIn = 0; // 总输入金额累计器，用于验证输入输出平衡
     for (int i = 0; i < vin.size(); i++) {
-      COutPoint prevout = vin[i].prevout;
+      COutPoint prevout = vin[i].prevout; // 当前输入引用的前一个输出
 
-      // Read txindex
+      // 读取前一个输出的交易索引信息
+      // CTxIndex包含交易在磁盘上的位置和花费状态信息
       CTxIndex txindex;
       bool fFound = true;
       if (fMiner && mapTestPool.count(prevout.hash)) {
-        // Get txindex from current proposed changes
+        // 在挖矿模式下，从当前提议的变更池中获取交易索引
+        // 这允许在创建新区块时临时验证交易链
         txindex = mapTestPool[prevout.hash];
       } else {
-        // Read txindex from txdb
+        // 从数据库中读取交易索引
         fFound = txdb.ReadTxIndex(prevout.hash, txindex);
       }
       if (!fFound && (fBlock || fMiner))
@@ -930,10 +1033,11 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
                               GetHash().ToString().substr(0, 10).c_str(),
                               prevout.hash.ToString().substr(0, 10).c_str());
 
-      // Read txPrev
+      // 读取前一个交易数据
       CTransaction txPrev;
       if (!fFound || txindex.pos == CDiskTxPos(1, 1, 1)) {
-        // Get prev tx from single transactions in memory
+        // 从内存中的未确认交易中获取前一个交易
+        // CDiskTxPos(1,1,1)表示该交易仅存在于内存池中，未写入磁盘
         CRITICAL_BLOCK(cs_mapTransactions) {
           if (!mapTransactions.count(prevout.hash))
             return error(
@@ -945,13 +1049,15 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
         if (!fFound)
           txindex.vSpent.resize(txPrev.vout.size());
       } else {
-        // Get prev tx from disk
+        // 从磁盘中读取前一个交易
         if (!txPrev.ReadFromDisk(txindex.pos))
           return error("ConnectInputs() : %s ReadFromDisk prev tx %s failed",
                        GetHash().ToString().substr(0, 10).c_str(),
                        prevout.hash.ToString().substr(0, 10).c_str());
       }
 
+      // 验证输出索引的有效性
+      // 确保引用的输出索引在交易输出数组和花费状态数组中都是有效的
       if (prevout.n >= txPrev.vout.size() || prevout.n >= txindex.vSpent.size())
         return error("ConnectInputs() : %s prevout.n out of range %d %d %d "
                      "prev tx %s\n%s",
@@ -960,7 +1066,8 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
                      prevout.hash.ToString().substr(0, 10).c_str(),
                      txPrev.ToString().c_str());
 
-      // If prev is coinbase, check that it's matured
+      // 如果前一个交易是币基交易，检查其成熟度
+      // 币基交易需要在区块链中确认COINBASE_MATURITY(100)次才能被花费
       if (txPrev.IsCoinBase())
         for (CBlockIndex *pindex = pindexBlock;
              pindex &&
@@ -972,27 +1079,32 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
                 "ConnectInputs() : tried to spend coinbase at depth %d",
                 pindexBlock->nHeight - pindex->nHeight);
 
-      // Verify signature
+      // 验证数字签名
+      // 确保当前交易的输入确实有权限花费引用的输出
       if (!VerifySignature(txPrev, *this, i))
         return error("ConnectInputs() : %s VerifySignature failed",
                      GetHash().ToString().substr(0, 10).c_str());
 
-      // Check for conflicts
+      // 检查双重支付
+      // 确保被引用的输出尚未被其他交易花费
       if (!txindex.vSpent[prevout.n].IsNull())
         return fMiner ? false
                       : error("ConnectInputs() : %s prev tx already used at %s",
                               GetHash().ToString().substr(0, 10).c_str(),
                               txindex.vSpent[prevout.n].ToString().c_str());
 
-      // Check for negative or overflow input values
+      // 检查输入金额的有效性，防止负值或溢出
+      // 确保单个输出金额和累计输入金额都在有效范围内
       nValueIn += txPrev.vout[prevout.n].nValue;
       if (!MoneyRange(txPrev.vout[prevout.n].nValue) || !MoneyRange(nValueIn))
         return error("ConnectInputs() : txin values out of range");
 
-      // Mark outpoints as spent
+      // 标记输出为已花费状态
+      // 将当前交易的磁盘位置记录到vSpent数组中，建立花费关系
       txindex.vSpent[prevout.n] = posThisTx;
 
-      // Write back
+      // 写回修改后的交易索引
+      // 根据不同的调用模式，将更新后的索引写入数据库或测试池
       if (fBlock) {
         if (!txdb.UpdateTxIndex(prevout.hash, txindex))
           return error("ConnectInputs() : UpdateTxIndex failed");
@@ -1001,11 +1113,14 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
       }
     }
 
+    // 验证输入输出平衡
+    // 确保总输入金额不小于总输出金额，防止创建新资金
     if (nValueIn < GetValueOut())
       return error("ConnectInputs() : %s value in < value out",
                    GetHash().ToString().substr(0, 10).c_str());
 
-    // Tally transaction fees
+    // 计算交易费用
+    // 交易费用 = 总输入金额 - 总输出金额，矿工可以收取此费用
     int64 nTxFee = nValueIn - GetValueOut();
     if (nTxFee < 0)
       return error("ConnectInputs() : %s nTxFee < 0",
@@ -1017,39 +1132,53 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
       return error("ConnectInputs() : nFees out of range");
   }
 
+  // 添加当前交易到索引中
+  // 根据不同的调用模式，将当前交易添加到磁盘索引或测试池中
   if (fBlock) {
-    // Add transaction to disk index
+    // 将交易添加到磁盘索引中
     if (!txdb.AddTxIndex(*this, posThisTx, pindexBlock->nHeight))
       return error("ConnectInputs() : AddTxPos failed");
   } else if (fMiner) {
-    // Add transaction to test pool
+    // 将交易添加到测试池中（用于挖矿时的临时验证）
     mapTestPool[GetHash()] = CTxIndex(CDiskTxPos(1, 1, 1), vout.size());
   }
 
   return true;
 }
 
+// 客户端模式交易连接验证函数
+// 这是ConnectInputs函数的简化版本，专门用于轻量级客户端
+// 只验证内存中的交易，不涉及磁盘操作，适用于SPV（简化支付验证）模式
+// 设计目的：为资源受限的客户端提供基本的交易验证功能
 bool CTransaction::ClientConnectInputs() {
+  // 币基交易不需要连接输入，币基交易是由矿工创建的新币交易
   if (IsCoinBase())
     return false;
 
-  // Take over previous transactions' spent pointers
+  // 获取前一个交易已花费输出的控制权
+  // 客户端模式下只处理内存池中的交易，不访问磁盘数据库
   CRITICAL_BLOCK(cs_mapTransactions) {
-    int64 nValueIn = 0;
+    int64 nValueIn = 0; // 累计输入金额
     for (int i = 0; i < vin.size(); i++) {
-      // Get prev tx from single transactions in memory
+      // 从内存中的单笔交易中获取前一个交易
+      // 注意：这里只验证内存池中的交易，不涉及区块链上的历史交易
       COutPoint prevout = vin[i].prevout;
       if (!mapTransactions.count(prevout.hash))
         return false;
       CTransaction &txPrev = mapTransactions[prevout.hash];
 
+      // 验证输出索引的有效性
       if (prevout.n >= txPrev.vout.size())
         return false;
 
-      // Verify signature
+      // 验证数字签名
+      // 确保当前交易有权限花费引用的输出
       if (!VerifySignature(txPrev, *this, i))
         return error("ConnectInputs() : VerifySignature failed");
 
+      // 检查双重支付（已注释的旧代码）
+      // 以下代码使用了过时的posNext机制，现在已被vSpent数组替代
+      // 这些检查现在是多余的，因为ConnectInputs函数已经处理了这些验证
       ///// this is redundant with the mapNextTx stuff, not sure which I want to
       /// get rid of
       ///// this has to go away now that posNext is gone
@@ -1060,11 +1189,13 @@ bool CTransaction::ClientConnectInputs() {
       // // Flag outpoints as used
       // txPrev.vout[prevout.n].posNext = posThisTx;
 
+      // 累计输入金额并验证范围
       nValueIn += txPrev.vout[prevout.n].nValue;
 
       if (!MoneyRange(txPrev.vout[prevout.n].nValue) || !MoneyRange(nValueIn))
         return error("ClientConnectInputs() : txin values out of range");
     }
+    // 验证输入输出平衡
     if (GetValueOut() > nValueIn)
       return false;
   }
@@ -1348,11 +1479,11 @@ bool CBlock::CheckBlock() const {
   // 检查项4：创币交易验证
   // 确保区块包含且只包含一个创币交易，这是比特币区块的标准结构
   // 创币交易（Coinbase Transaction）是区块中生成新比特币的特殊交易
-  
+  // 它包含了新生成的比特币奖励和矿工签名
   // 验证第一笔交易必须是创币交易
   if (vtx.empty() || !vtx[0].IsCoinBase())
     return error("CheckBlock() : first tx is not coinbase");
-  
+
   // 验证除第一笔交易外，其他交易都不能是创币交易
   // 防止创建多个创币交易来生成额外比特币
   for (int i = 1; i < vtx.size(); i++)
@@ -1454,54 +1585,74 @@ bool CBlock::AcceptBlock() {
 
 // 处理从网络接收到的区块
 // 流程：去重验证 → 前序检查 → 存储到磁盘 → 递归处理孤儿区块
+// 设计目的：处理网络接收到的区块，验证其有效性，并维护区块链的一致性
 bool ProcessBlock(CNode *pfrom, CBlock *pblock) {
-  // 检查是否已有该区块
+  // 检查是否已有该区块（去重处理）
+  // 首先检查是否已经在主链索引中，如果存在则忽略
   uint256 hash = pblock->GetHash();
   if (mapBlockIndex.count(hash))
     return error("ProcessBlock() : already have block %d %s",
                  mapBlockIndex[hash]->nHeight,
                  hash.ToString().substr(0, 20).c_str());
+  // 检查是否已经在孤儿区块池中，如果存在则忽略
   if (mapOrphanBlocks.count(hash))
     return error("ProcessBlock() : already have block (orphan) %s",
                  hash.ToString().substr(0, 20).c_str());
 
-  // 基本验证
+  // 基本结构验证
+  // 验证区块的基本结构、哈希值、工作量证明等
   if (!pblock->CheckBlock())
     return error("ProcessBlock() : CheckBlock FAILED");
 
-  // 检查是否有前序区块
+  // 检查前序区块是否存在（孤儿区块处理的关键逻辑）
+  // 如果前序区块不在主链索引中，则此区块为孤儿区块
   if (!mapBlockIndex.count(pblock->hashPrevBlock)) {
     printf("ProcessBlock: ORPHAN BLOCK, prev=%s\n",
            pblock->hashPrevBlock.ToString().substr(0, 20).c_str());
-    // 作为孤儿区块保存
+
+    // 创建孤儿区块副本并存储到孤儿区块池中
+    // 使用动态分配，因为孤儿区块可能需要在内存中保留一段时间
     CBlock *pblock2 = new CBlock(*pblock);
     mapOrphanBlocks.insert(make_pair(hash, pblock2));
+    // 建立反向映射，便于后续找到依赖此区块的孤儿区块
     mapOrphanBlocksByPrev.insert(make_pair(pblock2->hashPrevBlock, pblock2));
 
-    // 请求缺失的前序区块
+    // 向网络请求缺失的前序区块
+    // 使用GetOrphanRoot找到孤儿链的起始点，请求完整的链
     if (pfrom)
       pfrom->PushGetBlocks(pindexBest, GetOrphanRoot(pblock2));
     return true;
   }
 
-  // 存储到磁盘并添加到区块链
+  // 前序区块存在，可以正常处理区块
+  // 存储到磁盘并添加到主链索引中
   if (!pblock->AcceptBlock())
     return error("ProcessBlock() : AcceptBlock FAILED");
 
   // 递归处理依赖此区块的孤儿区块
+  // 当新区块被接受后，可能会有依赖此区块的孤儿区块变得可以处理
   vector<uint256> vWorkQueue;
-  vWorkQueue.push_back(hash);
+  vWorkQueue.push_back(hash); // 从当前区块开始处理
+
+  // 广度优先遍历，依次处理每个新加入的区块
   for (int i = 0; i < vWorkQueue.size(); i++) {
     uint256 hashPrev = vWorkQueue[i];
+
+    // 查找所有依赖当前区块的孤儿区块
     for (multimap<uint256, CBlock *>::iterator mi =
              mapOrphanBlocksByPrev.lower_bound(hashPrev);
          mi != mapOrphanBlocksByPrev.upper_bound(hashPrev); ++mi) {
       CBlock *pblockOrphan = (*mi).second;
+
+      // 尝试接受这个孤儿区块
       if (pblockOrphan->AcceptBlock())
-        vWorkQueue.push_back(pblockOrphan->GetHash());
+        vWorkQueue.push_back(pblockOrphan->GetHash()); // 如果成功，加入处理队列
+
+      // 从孤儿区块池中删除此区块
       mapOrphanBlocks.erase(pblockOrphan->GetHash());
-      delete pblockOrphan;
+      delete pblockOrphan; // 释放内存
     }
+    // 清理当前区块的反向映射
     mapOrphanBlocksByPrev.erase(hashPrev);
   }
 
@@ -2765,26 +2916,59 @@ inline void SHA256Transform(void *pstate, void *pinput, const void *pinit) {
 // 但有时会周期性地更新，或者当 nNonce 为 0xffff0000 或更高时，
 // 将会重新构建区块并从零开始重新计数 nNonce。
 
+// 哈希扫描函数（Crypto++版本）
+// 参数说明：
+//   pmidstate: SHA256中间状态缓冲区，包含预计算的哈希状态，用于加速计算
+//   pdata: 区块数据缓冲区，包含区块头信息（版本、父块哈希、Merkle根、时间戳、难度、nonce）
+//   phash1: 第一次SHA256变换的结果缓冲区
+//   phash: 最终的双SHA256哈希结果缓冲区
+//   nHashesDone: 输出参数，记录本次扫描完成的哈希尝试次数
+// 返回值：找到的有效nonce值，或-1表示未找到满足条件的nonce
 unsigned int ScanHash_CryptoPP(char *pmidstate, char *pdata, char *phash1,
                                char *phash, unsigned int &nHashesDone) {
+  // 获取区块数据缓冲区中nonce字段的引用（偏移量12字节处）
+  // 这是区块头中的nonce字段，初始值为0，每次循环递增
   unsigned int &nNonce = *(unsigned int *)(pdata + 12);
+  
+  // 无限循环：持续尝试不同的nonce值，直到找到满足条件的nonce或达到退出条件
   for (;;) {
     // Crypto++ SHA-256
     // Hash pdata using pmidstate as the starting state into
     // preformatted buffer phash1, then hash phash1 into phash
+    
+    // 步骤1：递增nonce值（工作量证明的核心机制）
+    // 每次循环尝试一个不同的nonce值，从0开始递增
     nNonce++;
+    
+    // 步骤2：第一次SHA256变换
+    // 使用pmidstate作为中间状态，对区块数据进行第一次哈希计算
+    // pmidstate包含预计算的SHA256状态，可避免重复计算区块头的不变部分
     SHA256Transform(phash1, pdata, pmidstate);
+    
+    // 步骤3：第二次SHA256变换
+    // 对第一次哈希结果进行第二次SHA256计算，实现比特币的双SHA256哈希
+    // phash1作为输入，pSHA256InitState作为初始状态
     SHA256Transform(phash, phash1, pSHA256InitState);
 
     // Return the nonce if the hash has at least some zero bits,
     // caller will check if it has enough to reach the target
+    
+    // 步骤4：快速预筛选检查
+    // 检查哈希结果的最后16位（索引14处的16位字）是否为零
+    // 这是一个快速筛选机制：如果连最后16位都不是零，则肯定不满足难度要求
+    // 只有通过这个快速检查的nonce才需要进一步验证是否满足目标难度
     if (((unsigned short *)phash)[14] == 0)
       return nNonce;
 
     // If nothing found after trying for a while, return -1
+    
+    // 步骤5：循环退出条件检查
+    // 每当nonce的低16位全部为1（即nonce & 0xffff == 0）时，表示已完成一轮完整扫描
+    // 此时记录扫描的哈希次数并返回-1，让调用者决定是否重建区块或继续搜索
+    // 这种设计避免无限循环，确保系统在适当时候能够调整搜索策略
     if ((nNonce & 0xffff) == 0) {
-      nHashesDone = 0xffff + 1;
-      return -1;
+      nHashesDone = 0xffff + 1; // 记录本轮完成的哈希尝试次数（65536次）
+      return -1; // 返回-1表示需要重建区块或调整搜索参数
     }
   }
 }
@@ -2814,97 +2998,188 @@ public:
 
 // 创建新的待挖矿区块
 // 流程：创建创币交易 → 收集内存池交易 → 计算手续费 → 设置区块奖励
+// 创建新区块的核心方法
+// 该方法负责构建一个完整的、符合网络标准的比特币区块
+// 是比特币挖矿过程中最重要的环节之一，实现了从内存池交易到新区块的转换
+// 设计目的：在保证区块安全性和完整性的前提下，最大化矿工收益并维护网络效率
 CBlock *CreateNewBlock(CReserveKey &reservekey) {
-  CBlockIndex *pindexPrev = pindexBest; // 获取最新区块高度
+  // 获取当前区块链的最新区块索引
+  // pindexBest 是全局变量，指向当前最长链的最后一个区块
+  // 这是新区块链接的基础，确保新区块在正确的链上延伸
+  CBlockIndex *pindexPrev = pindexBest;
 
-  // 创建新区块对象
+  // 创建新区块对象并使用智能指针管理生命周期
   // auto_ptr 是 C++ 标准库中的智能指针，用于自动管理对象的生命周期
   // 当 auto_ptr 超出作用域时，会自动调用 delete 释放内存
+  // 这种设计避免了手动内存管理可能导致的内存泄漏
   auto_ptr<CBlock> pblock(new CBlock());
+
+  // 检查内存分配是否成功
+  // new 运算符可能在系统内存不足时返回 NULL
+  // 这种检查对于防止空指针解引用至关重要
   if (!pblock.get())
     return NULL;
 
+  // ========================================
   // 第一步：创建创币交易（Coinbase Transaction）
-  // 创币交易是区块中的第一笔交易，生成新比特币作为挖矿奖励
+  // ========================================
+  // 创币交易是比特币区块中唯一的特殊交易，具有以下特点：
+  // 1. 没有输入（prevout.SetNull()）
+  // 2. 生成新比特币作为挖矿奖励
+  // 3. 包含矿工指定的输出地址
+
   CTransaction txNew;
-  txNew.vin.resize(1);
-  txNew.vin[0].prevout.SetNull(); // 创币交易是没有输入的
-  txNew.vout.resize(1);           // 创币交易只有一个输出
-  // 输出锁定脚本：只有拥有对应私钥的人才能花费
+  txNew.vin.resize(1);            // 创币交易只有一个输入位置
+  txNew.vin[0].prevout.SetNull(); // 创币交易没有输入引用（特殊标记）
+  txNew.vout.resize(1);           // 通常只有一个输出，但理论上可以有多个
+  // 输出锁定脚本：将新生成的比特币锁定到指定地址
+  // reservekey.GetReservedKey() 获取新生成的地址公钥
+  // OP_CHECKSIG 确保只有拥有对应私钥的人才能花费这些比特币
   txNew.vout[0].scriptPubKey << reservekey.GetReservedKey() << OP_CHECKSIG;
 
-  // 将创币交易添加到区块（作为第一笔交易）
+  // 将创币交易添加到区块交易列表的第一个位置
+  // 根据比特币协议，创币交易必须是区块的第一笔交易
   pblock->vtx.push_back(txNew);
 
+  // ========================================
   // 第二步：从内存池收集交易到区块
-  int64 nFees = 0; // 累计交易手续费
+  // ========================================
+  // 这个阶段是区块构建的核心，需要：
+  // 1. 从内存池中选择合适的交易
+  // 2. 按优先级排序交易
+  // 3. 验证交易的合法性
+  // 4. 确保区块不超出大小和复杂度限制
+
+  int64 nFees = 0; // 累计所有有效交易的交易手续费
+
+  // 使用临界区保护并发访问
+  // cs_main 保护区块链状态，cs_mapTransactions 保护内存池交易
+  // 在高并发环境中这是必要的，防止数据竞争和不一致状态
   CRITICAL_BLOCK(cs_main)
   CRITICAL_BLOCK(cs_mapTransactions) {
+    // 打开交易数据库用于读取历史交易
+    // "r" 参数表示只读模式，这可以提高性能并避免写入冲突
     CTxDB txdb("r");
 
-    // 按优先级处理交易（高优先级交易优先）
-    list<COrphan> vOrphan; // 孤儿交易列表（依赖未确认交易）
+    // 初始化交易处理所需的数据结构
+
+    // vOrphan: 存储依赖未确认交易的孤儿交易
+    // 当一个交易的输入引用了尚未确认的交易时，该交易就成为孤儿交易
+    list<COrphan> vOrphan;
+
+    // mapDependers: 维护交易依赖关系图
+    // key: 被依赖的交易哈希，value: 依赖于该交易的孤儿交易列表
     map<uint256, vector<COrphan *>> mapDependers;
-    multimap<double, CTransaction *> mapPriority; // 优先级队列
+
+    // mapPriority: 优先级队列，存储已验证交易的优先级信息
+    // multimap 允许相同优先级的多个交易存在
+    // 负的优先级值实现最大堆（优先级高的在前）
+    multimap<double, CTransaction *> mapPriority;
+
+    // ========================================
+    // 阶段 2.1: 遍历内存池交易并计算优先级
+    // ========================================
 
     // 遍历内存池中的所有交易
+    // mapTransactions 是全局内存池，包含所有待确认的交易
     for (map<uint256, CTransaction>::iterator mi = mapTransactions.begin();
          mi != mapTransactions.end(); ++mi) {
       CTransaction &tx = (*mi).second;
-      if (tx.IsCoinBase() || !tx.IsFinal()) // 跳过创币交易和未final的交易
+
+      // 跳过无效交易
+      // IsCoinBase(): 跳过已有的创币交易（内存池中不应该有）
+      // !IsFinal(): 跳过尚未满足时间锁要求的交易
+      if (tx.IsCoinBase() || !tx.IsFinal())
         continue;
 
-      // 处理依赖关系
-      COrphan *porphan = NULL;
-      double dPriority = 0;
+      // ========================================
+      // 处理交易依赖关系和计算优先级
+      // ========================================
+
+      COrphan *porphan = NULL; // 当前交易的孤儿状态（如果适用）
+      double dPriority = 0;    // 交易的累计优先级（币龄 × 金额）
+
+      // 遍历交易的每个输入，计算优先级
       foreach (const CTxIn &txin, tx.vin) {
-        // 读取前序交易
-        CTransaction txPrev;
-        CTxIndex txindex;
+        // 尝试从磁盘读取被引用的前序交易
+        CTransaction txPrev; // 前序交易
+        CTxIndex txindex;    // 前序交易在磁盘中的位置信息
+
+        // ReadFromDisk(): 从区块链数据库中读取历史交易
+        // txin.prevout 包含前序交易的哈希和输出索引
         if (!txPrev.ReadFromDisk(txdb, txin.prevout, txindex)) {
-          // 前序交易未确认，作为孤儿交易等待
+          // 前序交易未找到或未确认，这使得当前交易成为孤儿交易
+
+          // 创建孤儿交易条目
           if (!porphan) {
             vOrphan.push_back(COrphan(&tx));
-            porphan = &vOrphan.back();
+            porphan = &vOrphan.back(); // 获取刚添加的孤儿交易指针
           }
+
+          // 维护依赖关系：被依赖的交易 -> 依赖于它的交易列表
           mapDependers[txin.prevout.hash].push_back(porphan);
           porphan->setDependsOn.insert(txin.prevout.hash);
-          continue;
+
+          continue; // 跳过后续计算，等待依赖交易确认
         }
+
+        // 获取前序交易输出中的比特币金额
         int64 nValueIn = txPrev.vout[txin.prevout.n].nValue;
 
-        // 读取区块头计算确认数
-        int nConf = 0;
+        // ========================================
+        // 计算交易确认数（币龄的重要组成）
+        // ========================================
+
+        int nConf = 0; // 确认数，表示前序交易在多少个区块之前确认
+
+        // 读取包含前序交易的区块
         CBlock block;
         if (block.ReadFromDisk(txindex.pos.nFile, txindex.pos.nBlockPos,
                                false)) {
+          // 在区块链索引中查找该区块
           map<uint256, CBlockIndex *>::iterator it =
               mapBlockIndex.find(block.GetHash());
           if (it != mapBlockIndex.end()) {
             CBlockIndex *pindex = (*it).second;
+            // 检查该区块是否在主链上
             if (pindex->IsInMainChain())
+              // 计算确认数：当前链高度 - 交易确认区块高度 + 1
+              // +1 是因为确认从1开始计算
               nConf = 1 + nBestHeight - pindex->nHeight;
           }
         }
 
-        // 优先级 = 币龄 * 金额 / 交易大小
+        // ========================================
+        // 优先级计算：币龄 × 金额
+        // ========================================
+        // 币龄 = 确认数 × 比特币数量
+        // 确认时间越长、金额越大的输入，优先级越高
         dPriority += (double)nValueIn * nConf;
 
+        // 调试输出：显示优先级计算过程
         if (fDebug && GetBoolArg("-printpriority"))
           printf(
               "priority     nValueIn=%-12I64d nConf=%-5d dPriority=%-20.1f\n",
               nValueIn, nConf, dPriority);
       }
 
-      // 计算优先级（币龄/交易大小）
+      // ========================================
+      // 优先级归一化：除以交易大小
+      // ========================================
+      // 优先级公式：币龄 × 金额 / 交易大小
+      // 这样既考虑了币龄和金额，也考虑了交易占用的网络资源
       dPriority /= ::GetSerializeSize(tx, SER_NETWORK);
 
+      // 将交易加入相应的队列
       if (porphan)
+        // 孤儿交易：存储优先级以便后续处理
         porphan->dPriority = dPriority;
       else
-        mapPriority.insert(
-            make_pair(-dPriority, &(*mi).second)); // 负值实现最大堆
+        // 已验证交易：直接加入优先级队列
+        // 使用负值实现最大堆（multimap默认升序排列）
+        mapPriority.insert(make_pair(-dPriority, &(*mi).second));
 
+      // 调试输出：显示交易优先级信息
       if (fDebug && GetBoolArg("-printpriority")) {
         printf("priority %-20.1f %s\n%s", dPriority,
                tx.GetHash().ToString().substr(0, 10).c_str(),
@@ -2915,73 +3190,155 @@ CBlock *CreateNewBlock(CReserveKey &reservekey) {
       }
     }
 
-    // 将交易收集到区块中
-    map<uint256, CTxIndex> mapTestPool;
-    uint64 nBlockSize = 1000; // 收集交易限制：区块基础大小
-    int nBlockSigOps = 100;   // 收集交易限制：签名操作基础数量
+    // ========================================
+    // 阶段 2.2: 按优先级选择交易构建区块
+    // ========================================
 
-    // 按优先级从高到低处理交易
+    // mapTestPool: 临时UTXO池，存储已验证交易的输入状态
+    // 用于防止双重支付和确保UTXO状态一致性
+    map<uint256, CTxIndex> mapTestPool;
+
+    // 区块资源限制变量
+    uint64 nBlockSize = 1000; // 当前区块大小（初始包含创币交易和基本结构）
+    int nBlockSigOps = 100;   // 当前区块签名操作数量（基础开销）
+
+    // ========================================
+    // 主选择循环：按优先级从高到低处理交易
+    // ========================================
     while (!mapPriority.empty()) {
       // 取出最高优先级交易
       double dPriority = -(*mapPriority.begin()).first;
       CTransaction &tx = *(*mapPriority.begin()).second;
       mapPriority.erase(mapPriority.begin());
 
-      // 检查区块大小限制
-      unsigned int nTxSize = ::GetSerializeSize(tx, SER_NETWORK);
-      if (nBlockSize + nTxSize >= MAX_BLOCK_SIZE_GEN) // 1MB限制
-        continue;
-      int nTxSigOps = tx.GetSigOpCount();
-      if (nBlockSigOps + nTxSigOps >= MAX_BLOCK_SIGOPS) // 签名操作限制
-        continue;
+      // ========================================
+      // 区块大小限制检查
+      // ========================================
 
-      // 计算交易手续费
+      // 计算交易的序列化大小
+      unsigned int nTxSize = ::GetSerializeSize(tx, SER_NETWORK);
+
+      // 检查是否超出区块大小限制（1MB）
+      // 这里是硬限制，不能违反
+      if (nBlockSize + nTxSize >= MAX_BLOCK_SIZE_GEN)
+        continue; // 跳过该交易，继续处理下一个
+
+      // 计算交易的签名操作数量
+      int nTxSigOps = tx.GetSigOpCount();
+
+      // 检查是否超出签名操作限制
+      // 限制签名操作数量可以防止恶意构造的复杂交易
+      if (nBlockSigOps + nTxSigOps >= MAX_BLOCK_SIGOPS)
+        continue; // 跳过该交易
+
+      // ========================================
+      // 交易手续费计算和验证
+      // ========================================
+
+      // 确定是否允许免费交易
+      // 条件：小交易（<4000字节）或高优先级交易可以免费
       bool fAllowFree =
           (nBlockSize + nTxSize < 4000 || dPriority > COIN * 144 / 250);
+
+      // 计算最小所需手续费
+      // 手续费计算考虑了当前区块的拥挤程度
       int64 nMinFee = tx.GetMinFee(nBlockSize, fAllowFree);
 
-      // 验证交易输入（连接UTXO）
+      // ========================================
+      // 交易验证：UTXO连接和双重支付检查
+      // ========================================
+
+      // 创建临时UTXO池用于验证
       map<uint256, CTxIndex> mapTestPoolTmp(mapTestPool);
+
+      // ConnectInputs(): 验证交易的输入引用
+      // - 检查引用的UTXO是否存在且未被花费
+      // - 验证交易签名的有效性
+      // - 计算实际的手续费
+      // - 更新临时UTXO池状态
       if (!tx.ConnectInputs(txdb, mapTestPoolTmp, CDiskTxPos(1, 1, 1),
                             pindexPrev, nFees, false, true, nMinFee))
         continue; // 验证失败，跳过此交易
 
+      // 验证成功，更新UTXO池状态
       swap(mapTestPool, mapTestPoolTmp);
 
-      // 交易有效，添加到区块
-      pblock->vtx.push_back(tx);
-      nBlockSize += nTxSize;
-      nBlockSigOps += nTxSigOps;
+      // ========================================
+      // 交易通过所有检查，添加到区块
+      // ========================================
 
-      // 将依赖此交易的孤儿交易加入队列
-      uint256 hash = tx.GetHash();
+      pblock->vtx.push_back(tx); // 添加到区块交易列表
+      nBlockSize += nTxSize;     // 更新区块大小统计
+      nBlockSigOps += nTxSigOps; // 更新签名操作统计
+
+      // ========================================
+      // 处理依赖此交易的孤儿交易
+      // ========================================
+
+      uint256 hash = tx.GetHash(); // 获取交易哈希
+
+      // 检查是否有交易依赖于刚处理的交易
       if (mapDependers.count(hash)) {
+        // 遍历所有依赖于当前交易的孤儿交易
         foreach (COrphan *porphan, mapDependers[hash]) {
           if (!porphan->setDependsOn.empty()) {
+            // 移除当前依赖
             porphan->setDependsOn.erase(hash);
+
+            // 如果所有依赖都已满足，将孤儿交易加入优先级队列
             if (porphan->setDependsOn.empty())
               mapPriority.insert(make_pair(-porphan->dPriority, porphan->ptx));
           }
         }
       }
     }
-  }
+  } // 临界区结束
 
+  // ========================================
   // 第三步：设置创币交易输出金额
-  // 金额 = 出块奖励 + 所有交易手续费
+  // ========================================
+  // 创币交易奖励 = 基础出块奖励 + 所有交易的手续费总和
+  // GetBlockValue() 根据区块高度计算基础奖励（每4年减半）
+  // 交易手续费激励矿工包含更多交易
   pblock->vtx[0].vout[0].nValue = GetBlockValue(pindexPrev->nHeight + 1, nFees);
 
-  // 第四步：填充区块头
-  pblock->hashPrevBlock = pindexPrev->GetBlockHash(); // 设置前一区块哈希
-  pblock->hashMerkleRoot = pblock->BuildMerkleTree(); // 构建梅克尔树
-  pblock->nTime =
-      max(pindexPrev->GetMedianTimePast() + 1, GetAdjustedTime()); // 设置时间戳
-  pblock->nBits = GetNextWorkRequired(pindexPrev); // 设置难度目标
-  pblock->nNonce = 0;                              // 随机数从0开始
+  // ========================================
+  // 第四步：填充区块头信息
+  // ========================================
 
+  // 设置前一区块哈希，形成区块链链接
+  // 确保新区块在当前最长链上延伸
+  pblock->hashPrevBlock = pindexPrev->GetBlockHash();
+
+  // 构建并设置梅克尔树根哈希
+  // 这是所有交易完整性的关键验证点
+  pblock->hashMerkleRoot = pblock->BuildMerkleTree();
+
+  // 设置区块时间戳
+  // 使用中位数时间避免时间操纵，确保时间戳的合理性
+  // pindexPrev->GetMedianTimePast(): 前11个区块的中位数时间
+  // GetAdjustedTime(): 网络校正后的本地时间
+  pblock->nTime = max(pindexPrev->GetMedianTimePast() + 1, GetAdjustedTime());
+
+  // 设置工作量证明难度目标
+  // GetNextWorkRequired(): 根据前一个区块的时间间隔自动调整难度
+  // 维持平均10分钟的出块时间
+  pblock->nBits = GetNextWorkRequired(pindexPrev);
+
+  // 初始化随机数为0，挖矿过程会逐步增加
+  pblock->nNonce = 0;
+
+  // 释放智能指针管理的内存，返回裸指针
+  // 调用者负责释放返回的区块对象
   return pblock.release();
 }
 
+// 增加额外非ce值
+// 该函数用于在挖矿过程中增加额外的非ce值，以增加区块的工作量证明难度
+//- CBlock *pblock : 指向当前正在挖掘的区块的指针
+// - CBlockIndex *pindexPrev : 指向前一个区块的索引，用于获取时间信息
+// - unsigned int &nExtraNonce : 对额外nonce值的引用，用于在函数调用之间保持状态
+// - int64 &nPrevTime : 对前一次时间的引用，用于追踪时间变化
 void IncrementExtraNonce(CBlock *pblock, CBlockIndex *pindexPrev,
                          unsigned int &nExtraNonce, int64 &nPrevTime) {
   // Update nExtraNonce
@@ -3093,6 +3450,14 @@ void BitcoinMiner() {
   int64 nPrevTime = 0;          // 上次时间（用于检测时间变化）
 
   // 主循环：持续挖矿直到被停止
+  // 每次循环都创建一个新的区块，然后挖矿
+  /**
+  - fGenerateBitcoins ：用户手动停止挖矿
+- fShutdown ：系统关闭信号
+- vNodes.empty() ：网络断开
+- IsInitialBlockDownload() ：区块链同步中
+   */
+
   while (fGenerateBitcoins) {
     // 线程检查？没看懂是做什么的
     if (AffinityBugWorkaround(ThreadBitcoinMiner))
