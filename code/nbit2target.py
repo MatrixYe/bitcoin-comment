@@ -107,7 +107,7 @@ def compare_hash_and_target(block_hash_str, target_hex_64, target_dec):
 if __name__ == "__main__":
     # 1. 输入参数
     decimal_nbit = 386000389
-    block_hash_str = " 0000000000000000000095c94376daa5924b119bff55dbb7e82748baf493380c"  # 原始区块哈希
+    block_hash_str = " 0000000000000000000095c94376daa5924b119bff55dbb7e82748baf493380c"  # 区块哈希
 
     # 2. 执行nBit转换和目标值计算
     nbit_target_result = decimal_nbit_to_target(decimal_nbit)

@@ -2,8 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
+# 泊松分布
 # λ值（核心参数）
-lam = 1
+lam = 10
 plt.rcParams["axes.unicode_minus"] = False  # 解决负号显示异常
 x = np.arange(0, lam + 10, 1)  # 适当缩小x范围
 
@@ -30,7 +31,7 @@ pmf_vals = np.array([poisson_pmf(k_val, lam) for k_val in x])
 print("--" * 20)
 cdf_vals = np.array([poisson_cdf(k_val, lam) for k_val in x])
 
-# 3. 同画布双图可视化（2行1列，双图均显示x轴）
+# 3. 同画布双图可视化2行1列
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 9), sharex=False)
 
 # 上方子图：绘制PMF + 显示x轴 + 标注每个点的y值
