@@ -49,9 +49,6 @@ public:
   // 活跃度 = 收到的原子数量 + 新获得的原子数量
   // 信誉 = 发出的原子数量
   int GetAtomCount() const { return (vAtomsIn.size() + vAtomsNew.size()); }
-  // 计算用户的信誉总数（发出的原子数量），
-  // 用于评估用户的贡献度和信誉度。（这个方法我加的）
-  int GetCreditCount() const { return vAtomsOut.size(); }
   // 添加原子的方法
   void AddAtom(unsigned short nAtom, bool fOrigin);
 };

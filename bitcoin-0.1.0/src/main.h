@@ -9,7 +9,7 @@ class CCoinBase;
 class CTxIn;
 class CTxOut;
 class CTransaction;
-class CBlock;
+class CBlock
 class CBlockIndex;
 class CWalletTx;
 class CKeyItem;
