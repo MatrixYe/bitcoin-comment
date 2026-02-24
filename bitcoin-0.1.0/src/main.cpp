@@ -1485,316 +1485,581 @@ bool ProcessMessages(CNode *pfrom) {
   return true;
 }
 
+// ============================================================================
+// 消息处理核心函数 - 处理从P2P网络接收到的各种消息
+// 参数说明：
+//   pfrom: 发送消息的节点指针
+//   strCommand: 消息类型命令字符串（如"version"、"addr"、"inv"等）
+//   vRecv: 接收到的消息数据流
+// 返回值：
+//   true: 消息处理成功
+//   false: 消息处理失败（如协议错误）
+// ============================================================================
 bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
+  // ============================================================================
+  // 静态变量：用于订单处理中的密钥重用机制
+  // 作用：为同一IP地址重复使用相同的公钥，直到该IP使用该密钥完成交易
+  // 这样可以简化订单处理流程，避免为每个订单生成新密钥
+  // ============================================================================
   static map<unsigned int, vector<unsigned char>> mapReuseKey;
+
+  // ============================================================================
+  // 调试输出：打印接收到的消息信息
+  // 输出内容包括：消息类型、消息大小、前25字节的十六进制表示
+  // 这对于调试网络协议和消息格式非常有用
+  // ============================================================================
   printf("received: %-12s (%d bytes)  ", strCommand.c_str(), vRecv.size());
   for (int i = 0; i < min(vRecv.size(), (unsigned int)25); i++)
     printf("%02x ", vRecv[i] & 0xff);
   printf("\n");
+
+  // ============================================================================
+  // 测试模式：随机丢弃消息以测试网络容错能力
+  // nDropMessagesTest > 0时，以1/nDropMessagesTest的概率随机丢弃消息
+  // 这是用于测试网络在消息丢失情况下的行为
+  // ============================================================================
   if (nDropMessagesTest > 0 && GetRand(nDropMessagesTest) == 0) {
     printf("dropmessages DROPPING RECV MESSAGE\n");
-    return true;
+    return true;  // 返回true表示消息已处理（被丢弃）
   }
 
+  // ============================================================================
+  // 消息类型处理：version - 版本握手消息
+  // 这是P2P连接建立后的第一条消息，用于协商协议版本和服务类型
+  // ============================================================================
   if (strCommand == "version") {
-    // Can only do this once
+    // 版本消息只能接收一次，防止重复处理
+    // 如果pfrom->nVersion != 0，说明已经处理过版本消息
     if (pfrom->nVersion != 0)
-      return false;
+      return false;  // 返回false表示协议错误
 
-    int64 nTime;
-    CAddress addrMe;
+    // 从消息流中读取版本信息
+    int64 nTime;      // 对方节点的时间戳
+    CAddress addrMe;   // 对方节点认为的我的地址
+
+    // 解析版本消息：版本号、服务标志、时间戳、地址
     vRecv >> pfrom->nVersion >> pfrom->nServices >> nTime >> addrMe;
+
+    // 验证版本号有效性（不能为0）
     if (pfrom->nVersion == 0)
       return false;
 
+    // 设置发送和接收流的版本号
+    // 使用双方版本号的较小值，确保兼容性
     pfrom->vSend.SetVersion(min(pfrom->nVersion, VERSION));
     pfrom->vRecv.SetVersion(min(pfrom->nVersion, VERSION));
 
+    // 判断对方是否为客户端节点
+    // NODE_NETWORK标志表示该节点是全节点，提供完整服务
+    // 如果没有NODE_NETWORK标志，则是轻量级客户端，只请求自己需要的数据
     pfrom->fClient = !(pfrom->nServices & NODE_NETWORK);
+
+    // 如果对方是轻量级客户端，优化数据传输
+    // 只发送区块头，不发送完整的区块内容
     if (pfrom->fClient) {
-      pfrom->vSend.nType |= SER_BLOCKHEADERONLY;
-      pfrom->vRecv.nType |= SER_BLOCKHEADERONLY;
+      pfrom->vSend.nType |= SER_BLOCKHEADERONLY;   // 发送流只包含区块头
+      pfrom->vRecv.nType |= SER_BLOCKHEADERONLY;   // 接收流只包含区块头
     }
 
+    // 记录时间数据用于网络时间同步
+    // 通过收集多个节点的时间戳，可以计算出更准确的网络时间
     AddTimeData(pfrom->addr.ip, nTime);
 
-    // Ask the first connected node for block updates
+    // 向第一个连接的非客户端节点请求区块更新
+    // 静态变量fAskedForBlocks确保只向一个节点请求，避免重复请求
     static bool fAskedForBlocks;
     if (!fAskedForBlocks && !pfrom->fClient) {
-      fAskedForBlocks = true;
+      fAskedForBlocks = true;  // 标记已请求过区块
+
+      // 发送getblocks消息，请求从当前最佳区块开始的区块
+      // CBlockLocator(pindexBest)表示从当前最佳区块开始
+      // uint256(0)表示请求直到链的末端
       pfrom->PushMessage("getblocks", CBlockLocator(pindexBest), uint256(0));
     }
 
+    // 调试输出：打印对方认为的我的地址
     printf("version addrMe = %s\n", addrMe.ToString().c_str());
   }
 
+  // ============================================================================
+  // 版本检查：确保在接收其他消息之前已经完成了版本握手
+  // 如果pfrom->nVersion == 0，说明还没有收到version消息
+  // 这种情况下拒绝处理任何其他消息，防止协议混乱
+  // ============================================================================
   else if (pfrom->nVersion == 0) {
-    // Must have a version message before anything else
+    // 必须先收到version消息才能处理其他消息
     return false;
   }
 
+  // ============================================================================
+  // 消息类型处理：addr - 地址消息
+  // 用于交换网络中的节点地址，帮助节点发现新的对等节点
+  // ============================================================================
   else if (strCommand == "addr") {
+    // 从消息流中读取地址列表
     vector<CAddress> vAddr;
     vRecv >> vAddr;
 
-    // Store the new addresses
+    // 打开地址数据库，用于持久化存储节点地址
     CAddrDB addrdb;
+
+    // 遍历收到的每个地址
     foreach (const CAddress &addr, vAddr) {
+      // 检查是否正在关闭程序
       if (fShutdown)
-        return true;
+        return true;  // 正常退出，返回true
+
+      // 尝试将新地址添加到地址管理器
+      // AddAddress会检查地址是否已存在，并更新地址的时间戳
       if (AddAddress(addrdb, addr)) {
-        // Put on lists to send to other nodes
+        // 如果地址是新的，将其添加到发送队列中
+        // 这样可以将新地址传播给其他节点
+
+        // 将地址标记为已知，避免重复发送给同一节点
         pfrom->setAddrKnown.insert(addr);
-        CRITICAL_BLOCK(cs_vNodes)
-        foreach (CNode *pnode, vNodes)
-          if (!pnode->setAddrKnown.count(addr))
-            pnode->vAddrToSend.push_back(addr);
+
+        // 遍历所有连接的节点，将新地址加入它们的发送队列
+        CRITICAL_BLOCK(cs_vNodes)  // 临界区保护，确保线程安全
+          foreach (CNode *pnode, vNodes)
+            // 只向不知道该地址的节点发送
+            if (!pnode->setAddrKnown.count(addr))
+              pnode->vAddrToSend.push_back(addr);  // 加入发送队列
       }
     }
   }
 
+  // ============================================================================
+  // 消息类型处理：inv - 库存消息
+  // 用于通知对方节点有哪些数据对象可用（交易、区块、评论等）
+  // 这是比特币P2P网络中数据发现的核心机制
+  // ============================================================================
   else if (strCommand == "inv") {
+    // 从消息流中读取库存列表
     vector<CInv> vInv;
     vRecv >> vInv;
 
+    // 打开交易数据库（只读模式），用于检查是否已有相关数据
     CTxDB txdb("r");
+
+    // 遍历每个库存项
     foreach (const CInv &inv, vInv) {
+      // 检查是否正在关闭程序
       if (fShutdown)
         return true;
+
+      // 将库存项标记为已知，避免重复请求
+      // 这是防止重复请求的重要机制
       pfrom->AddInventoryKnown(inv);
 
+      // 检查本地是否已有该数据
       bool fAlreadyHave = AlreadyHave(txdb, inv);
       printf("  got inventory: %s  %s\n", inv.ToString().c_str(),
              fAlreadyHave ? "have" : "new");
 
+      // 如果本地没有该数据，向对方请求
       if (!fAlreadyHave)
-        pfrom->AskFor(inv);
+        pfrom->AskFor(inv);  // 将请求加入优先队列，稍后发送getdata消息
+      // 特殊处理：如果是区块且在孤儿区块映射中存在
+      // 说明该区块的前驱区块还未收到，需要请求前驱区块
       else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash))
         pfrom->PushMessage("getblocks", CBlockLocator(pindexBest),
                            GetOrphanRoot(mapOrphanBlocks[inv.hash]));
     }
   }
 
+  // ============================================================================
+  // 消息类型处理：getdata - 数据请求消息
+  // 用于请求具体的交易、区块、评论等数据对象
+  // ============================================================================
   else if (strCommand == "getdata") {
+    // 从消息流中读取请求的数据列表
     vector<CInv> vInv;
     vRecv >> vInv;
 
+    // 遍历每个请求的数据项
     foreach (const CInv &inv, vInv) {
+      // 检查是否正在关闭程序
       if (fShutdown)
         return true;
+
+      // 调试输出：打印请求的数据
       printf("received getdata for: %s\n", inv.ToString().c_str());
 
+      // 处理区块请求
       if (inv.type == MSG_BLOCK) {
-        // Send block from disk
+        // 从磁盘读取区块数据
+        // mapBlockIndex是全局的区块索引映射
         map<uint256, CBlockIndex *>::iterator mi = mapBlockIndex.find(inv.hash);
         if (mi != mapBlockIndex.end()) {
-          //// could optimize this to send header straight from blockindex for
-          ///client
+          // 优化建议：可以直接从blockindex发送区块头给客户端
+          // 而不需要读取完整的区块数据
           CBlock block;
+          // 从磁盘读取区块
+          // !pfrom->fClient表示如果对方是客户端，可以优化传输
           block.ReadFromDisk((*mi).second, !pfrom->fClient);
+          // 发送区块数据给请求节点
           pfrom->PushMessage("block", block);
         }
-      } else if (inv.IsKnownType()) {
-        // Send stream from relay memory
-        CRITICAL_BLOCK(cs_mapRelay) {
+      }
+      // 处理其他已知类型的数据请求（交易、评论等）
+      else if (inv.IsKnownType()) {
+        // 从中继内存中发送数据流
+        // mapRelay是全局的中继消息缓存，保存最近收到的消息
+        CRITICAL_BLOCK(cs_mapRelay) {  // 临界区保护，确保线程安全
           map<CInv, CDataStream>::iterator mi = mapRelay.find(inv);
           if (mi != mapRelay.end())
+            // 直接发送原始消息流，保持原始格式
+            // 这可以处理版本兼容性问题
             pfrom->PushMessage(inv.GetCommand(), (*mi).second);
         }
       }
     }
   }
 
+  // ============================================================================
+  // 消息类型处理：getblocks - 区块请求消息
+  // 用于请求从某个位置开始的区块列表
+  // 这是区块链同步的核心机制
+  // ============================================================================
   else if (strCommand == "getblocks") {
-    CBlockLocator locator;
-    uint256 hashStop;
+    // 从消息流中读取区块定位符和停止哈希
+    CBlockLocator locator;  // 区块定位符，表示请求者已知的最新区块
+    uint256 hashStop;      // 停止哈希，表示请求到此区块为止
     vRecv >> locator >> hashStop;
 
-    // Find the first block the caller has in the main chain
+    // 根据定位符找到请求者在主链上的第一个区块
+    // locator.GetBlockIndex()会返回请求者已知的最新区块索引
     CBlockIndex *pindex = locator.GetBlockIndex();
 
-    // Send the rest of the chain
+    // 从该区块的下一个区块开始发送
+    // 因为请求者已经有该区块，所以从下一个开始
     if (pindex)
       pindex = pindex->pnext;
+
+    // 调试输出：打印请求的区块范围
     printf("getblocks %d to %s\n", (pindex ? pindex->nHeight : -1),
            hashStop.ToString().substr(0, 14).c_str());
+
+    // 遍历区块链，发送区块库存
     for (; pindex; pindex = pindex->pnext) {
+      // 检查是否到达停止哈希
       if (pindex->GetBlockHash() == hashStop) {
         printf("  getblocks stopping at %d %s\n", pindex->nHeight,
                pindex->GetBlockHash().ToString().substr(0, 14).c_str());
-        break;
+        break;  // 到达停止点，停止发送
       }
 
-      // Bypass setInventoryKnown in case an inventory message got lost
-      CRITICAL_BLOCK(pfrom->cs_inventory) {
+      // 绕过setInventoryKnown，防止库存消息丢失导致区块无法同步
+      // 使用setInventoryKnown2作为临时集合，确保消息能够到达
+      CRITICAL_BLOCK(pfrom->cs_inventory) {  // 临界区保护，确保线程安全
         CInv inv(MSG_BLOCK, pindex->GetBlockHash());
-        // returns true if wasn't already contained in the set
+        // 如果不在setInventoryKnown2中，说明是新的库存项
         if (pfrom->setInventoryKnown2.insert(inv).second) {
+          // 从setInventoryKnown中移除，允许重新发送
           pfrom->setInventoryKnown.erase(inv);
+          // 加入发送队列
           pfrom->vInventoryToSend.push_back(inv);
         }
       }
     }
   }
 
+  // ============================================================================
+  // 消息类型处理：tx - 交易消息
+  // 用于接收和广播新的交易
+  // 这是比特币交易传播的核心机制
+  // ============================================================================
   else if (strCommand == "tx") {
+    // 工作队列：用于处理依赖此交易的孤儿交易
     vector<uint256> vWorkQueue;
+
+    // 保存原始消息流，用于转发
     CDataStream vMsg(vRecv);
+
+    // 从消息流中读取交易数据
     CTransaction tx;
     vRecv >> tx;
 
+    // 创建交易库存项
     CInv inv(MSG_TX, tx.GetHash());
-    pfrom->AddInventoryKnown(inv);
+    pfrom->AddInventoryKnown(inv);  // 标记为已知，避免重复处理
 
+    // 标记是否缺少输入
     bool fMissingInputs = false;
+
+    // 尝试接受交易
+    // AcceptTransaction会验证交易的有效性，包括签名、输入输出等
     if (tx.AcceptTransaction(true, &fMissingInputs)) {
+      // 如果交易属于本节点（输入使用本节点的私钥），添加到钱包
       AddToWalletIfMine(tx, NULL);
+
+      // 广播交易到网络
+      // 使用原始消息流，保持原始格式
       RelayMessage(inv, vMsg);
+
+      // 从已请求列表中移除，避免重复请求
       mapAlreadyAskedFor.erase(inv);
+
+      // 将交易哈希加入工作队列
       vWorkQueue.push_back(inv.hash);
 
-      // Recursively process any orphan transactions that depended on this one
+      // 递归处理依赖此交易的孤儿交易
+      // 孤儿交易是指缺少输入的交易，当其输入交易到达后，可以重新处理
       for (int i = 0; i < vWorkQueue.size(); i++) {
+        // 获取工作队列中的交易哈希
         uint256 hashPrev = vWorkQueue[i];
+
+        // 查找以该哈希为前驱的所有孤儿交易
+        // mapOrphanTransactionsByPrev是按前驱哈希索引的孤儿交易映射
         for (multimap<uint256, CDataStream *>::iterator mi =
                  mapOrphanTransactionsByPrev.lower_bound(hashPrev);
              mi != mapOrphanTransactionsByPrev.upper_bound(hashPrev); ++mi) {
+          // 获取孤儿交易的消息流
           const CDataStream &vMsg = *((*mi).second);
           CTransaction tx;
-          CDataStream(vMsg) >> tx;
+          CDataStream(vMsg) >> tx;  // 反序列化交易
+
+          // 创建孤儿交易的库存项
           CInv inv(MSG_TX, tx.GetHash());
 
+          // 尝试接受孤儿交易
           if (tx.AcceptTransaction(true)) {
+            // 调试输出：打印接受的孤儿交易
             printf("   accepted orphan tx %s\n",
                    inv.hash.ToString().substr(0, 6).c_str());
+
+            // 如果交易属于本节点，添加到钱包
             AddToWalletIfMine(tx, NULL);
+
+            // 广播孤儿交易
             RelayMessage(inv, vMsg);
+
+            // 从已请求列表中移除
             mapAlreadyAskedFor.erase(inv);
+
+            // 将孤儿交易哈希加入工作队列，继续处理依赖它的交易
             vWorkQueue.push_back(inv.hash);
           }
         }
       }
 
+      // 清理已处理的孤儿交易
       foreach (uint256 hash, vWorkQueue)
         EraseOrphanTx(hash);
-    } else if (fMissingInputs) {
+    }
+    // 如果交易缺少输入，将其作为孤儿交易存储
+    else if (fMissingInputs) {
       printf("storing orphan tx %s\n",
              inv.hash.ToString().substr(0, 6).c_str());
-      AddOrphanTx(vMsg);
+      AddOrphanTx(vMsg);  // 存储孤儿交易，等待其输入交易到达
     }
   }
 
+  // ============================================================================
+  // 消息类型处理：review - 评论消息
+  // 用于接收和广播用户评论
+  // 这是去中心化市场功能的一部分
+  // ============================================================================
   else if (strCommand == "review") {
+    // 保存原始消息流，用于转发
     CDataStream vMsg(vRecv);
+
+    // 从消息流中读取评论数据
     CReview review;
     vRecv >> review;
 
+    // 创建评论库存项
     CInv inv(MSG_REVIEW, review.GetHash());
-    pfrom->AddInventoryKnown(inv);
+    pfrom->AddInventoryKnown(inv);  // 标记为已知，避免重复处理
 
+    // 尝试接受评论
+    // AcceptReview会验证评论的有效性，包括签名、内容等
     if (review.AcceptReview()) {
-      // Relay the original message as-is in case it's a higher version than we
-      // know how to parse
+      // 转发原始消息，保持原始格式
+      // 这样可以处理版本兼容性问题，如果消息版本比我们支持的更高
+      // 也能正确转发给其他节点
       RelayMessage(inv, vMsg);
+
+      // 从已请求列表中移除，避免重复请求
       mapAlreadyAskedFor.erase(inv);
     }
   }
 
+  // ============================================================================
+  // 消息类型处理：block - 区块消息
+  // 用于接收和广播新的区块
+  // 这是区块链同步的核心机制
+  // ============================================================================
   else if (strCommand == "block") {
+    // 使用智能指针创建区块对象，自动管理内存
     auto_ptr<CBlock> pblock(new CBlock);
+
+    // 从消息流中读取区块数据
     vRecv >> *pblock;
 
-    //// debug print
+    // 调试输出：打印区块信息
     printf("received block:\n");
     pblock->print();
 
+    // 创建区块库存项
     CInv inv(MSG_BLOCK, pblock->GetHash());
-    pfrom->AddInventoryKnown(inv);
+    pfrom->AddInventoryKnown(inv);  // 标记为已知，避免重复处理
 
+    // 处理区块
+    // ProcessBlock会验证区块的有效性，并将其加入区块链
+    // pblock.release()释放智能指针的所有权，由ProcessBlock负责删除
     if (ProcessBlock(pfrom, pblock.release()))
+      // 如果区块处理成功，从已请求列表中移除
       mapAlreadyAskedFor.erase(inv);
   }
 
+  // ============================================================================
+  // 消息类型处理：getaddr - 地址请求消息
+  // 用于请求网络中的节点地址
+  // ============================================================================
   else if (strCommand == "getaddr") {
+    // 清空发送队列，准备发送新地址
     pfrom->vAddrToSend.clear();
-    //// need to expand the time range if not enough found
-    int64 nSince = GetAdjustedTime() - 60 * 60; // in the last hour
-    CRITICAL_BLOCK(cs_mapAddresses) {
+
+    // 计算时间范围：只发送最近一小时内活跃的地址
+    // 优化建议：如果找到的地址不够，可以扩展时间范围
+    int64 nSince = GetAdjustedTime() - 60 * 60; // 距现在1小时
+
+    // 遍历地址数据库，收集符合条件的地址
+    CRITICAL_BLOCK(cs_mapAddresses) {  // 临界区保护，确保线程安全
       foreach (const PAIRTYPE(vector<unsigned char>, CAddress) & item,
                mapAddresses) {
+        // 检查是否正在关闭程序
         if (fShutdown)
           return true;
+
+        // 获取地址对象
         const CAddress &addr = item.second;
+
+        // 只发送最近活跃的地址（时间戳大于nSince）
         if (addr.nTime > nSince)
-          pfrom->vAddrToSend.push_back(addr);
+          pfrom->vAddrToSend.push_back(addr);  // 加入发送队列
       }
     }
   }
 
+  // ============================================================================
+  // 消息类型处理：checkorder - 订单检查消息
+  // 用于检查订单的有效性
+  // 这是去中心化市场功能的一部分，用于验证订单
+  // ============================================================================
   else if (strCommand == "checkorder") {
-    uint256 hashReply;
-    CWalletTx order;
+    // 从消息流中读取订单信息
+    uint256 hashReply;  // 回复哈希，用于匹配请求和响应
+    CWalletTx order;   // 订单交易
     vRecv >> hashReply >> order;
 
-    /// we have a chance to check the order here
+    // 优化建议：在这里可以检查订单的有效性
+    // 例如检查金额、接收地址等
 
-    // Keep giving the same key to the same ip until they use it
+    // 密钥重用机制：为同一IP地址重复使用相同的公钥
+    // 这样可以简化订单处理流程，避免为每个订单生成新密钥
     if (!mapReuseKey.count(pfrom->addr.ip))
+      // 如果该IP还没有分配密钥，生成一个新的密钥对
       mapReuseKey[pfrom->addr.ip] = GenerateNewKey();
 
-    // Send back approval of order and pubkey to use
+    // 构造输出脚本，用于接收订单支付
     CScript scriptPubKey;
+    // 将公钥和OP_CHECKSIG操作码加入脚本
+    // 这样只有拥有对应私钥的人才能花费这笔资金
     scriptPubKey << mapReuseKey[pfrom->addr.ip] << OP_CHECKSIG;
+
+    // 发送回复消息，包含批准和公钥
+    // (int)0表示批准，(int)1表示拒绝
     pfrom->PushMessage("reply", hashReply, (int)0, scriptPubKey);
   }
 
+  // ============================================================================
+  // 消息类型处理：submitorder - 订单提交消息
+  // 用于提交已签名的订单交易
+  // 这是去中心化市场功能的一部分，用于完成订单
+  // ============================================================================
   else if (strCommand == "submitorder") {
-    uint256 hashReply;
-    CWalletTx wtxNew;
+    // 从消息流中读取订单信息
+    uint256 hashReply;  // 回复哈希，用于匹配请求和响应
+    CWalletTx wtxNew;  // 新的订单交易
     vRecv >> hashReply >> wtxNew;
 
-    // Broadcast
+    // 广播订单交易
+    // AcceptWalletTransaction会验证交易的有效性，并将其加入钱包
     if (!wtxNew.AcceptWalletTransaction()) {
+      // 如果交易无效，发送拒绝回复
       pfrom->PushMessage("reply", hashReply, (int)1);
       return error(
           "submitorder AcceptWalletTransaction() failed, returning error 1");
     }
+
+    // 标记交易时间为接收时间
     wtxNew.fTimeReceivedIsTxTime = true;
+
+    // 将交易添加到钱包
     AddToWallet(wtxNew);
+
+    // 广播交易到网络
     wtxNew.RelayWalletTransaction();
+
+    // 清除密钥重用映射，该IP已完成订单
     mapReuseKey.erase(pfrom->addr.ip);
 
-    // Send back confirmation
+    // 发送确认回复
+    // (int)0表示订单已成功处理
     pfrom->PushMessage("reply", hashReply, (int)0);
   }
 
+  // ============================================================================
+  // 消息类型处理：reply - 回复消息
+  // 用于处理异步请求的响应
+  // 这是请求-响应机制的核心，用于处理checkorder等请求的响应
+  // ============================================================================
   else if (strCommand == "reply") {
+    // 从消息流中读取回复哈希
     uint256 hashReply;
     vRecv >> hashReply;
 
+    // 查找对应的请求跟踪器
     CRequestTracker tracker;
-    CRITICAL_BLOCK(pfrom->cs_mapRequests) {
+    CRITICAL_BLOCK(pfrom->cs_mapRequests) {  // 临界区保护，确保线程安全
+      // 在请求映射中查找对应的哈希
       map<uint256, CRequestTracker>::iterator mi =
           pfrom->mapRequests.find(hashReply);
       if (mi != pfrom->mapRequests.end()) {
+        // 找到请求，提取跟踪器
         tracker = (*mi).second;
+        // 从映射中移除已处理的请求
         pfrom->mapRequests.erase(mi);
       }
     }
+
+    // 如果找到有效的跟踪器，调用其回调函数
+    // 回调函数会处理响应数据
     if (!tracker.IsNull())
       tracker.fn(tracker.param1, vRecv);
   }
 
+  // ============================================================================
+  // 未知消息处理：忽略未知命令以支持协议扩展
+  // 这样设计允许未来添加新的消息类型，而不会破坏旧版本节点的兼容性
+  // ============================================================================
   else {
-    // Ignore unknown commands for extensibility
+    // 忽略未知命令，打印调试信息
     printf("ProcessMessage(%s) : Ignored unknown message\n",
            strCommand.c_str());
   }
 
+  // ============================================================================
+  // 检查消息流是否还有未处理的数据
+  // 如果有，说明消息格式可能有问题，打印警告信息
+  // ============================================================================
   if (!vRecv.empty())
     printf("ProcessMessage(%s) : %d extra bytes\n", strCommand.c_str(),
            vRecv.size());
 
+  // 返回true表示消息处理成功
   return true;
 }
 

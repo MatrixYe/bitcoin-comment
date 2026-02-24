@@ -272,7 +272,7 @@ void AbandonRequests(void (*fn)(void*, CDataStream&), void* param1)
 
 
 
-//
+// 中间相遇机制
 // Subscription methods for the broadcast and subscription system.
 // Channel numbers are message numbers, i.e. MSG_TABLE and MSG_PRODUCT.
 //
