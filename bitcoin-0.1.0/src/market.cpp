@@ -208,7 +208,7 @@ bool CReview::AcceptReview() {
 
   // 创建一个评分者和被评分者的连接关系，Link
   CUser user;
-  // 通过评论者公钥计算用户哈希（ hashFrom
+  // 通过评论者公钥计算用户哈希（ hashFr/om
   // ），用于在数据库中查找评论者的用户信息
   uint256 hashFrom = Hash(vchPubKeyFrom.begin(), vchPubKeyFrom.end());
   //- 数据库中读取评论者的用户数据
