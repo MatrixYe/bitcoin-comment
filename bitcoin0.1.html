@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bitcoin0.1</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1D1D2D; overflow: hidden; height: 100vh; width: 100vw; }
+#container { width: 100%; height: 100%; overflow: auto; cursor: grab; }
+#container:active { cursor: grabbing; }
+#mindmap { display: block; min-width: 100%; min-height: 100%; }
+.node { user-select: none; }
+.node-text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; pointer-events: none; }
+.root-text { font-size: 16px; font-weight: 600; }
+.child-text { font-size: 14px; font-weight: 500; }
+.done-text { text-decoration: line-through; }
+.node.interactive:hover { filter: brightness(1.05); }
+.indicator-dot { pointer-events: none; }
+#panel { position: fixed; top: 0; right: 0; width: 400px; max-width: 90vw; height: 100vh; background: #2C2C3C; box-shadow: -2px 0 20px rgba(0,0,0,0.2); z-index: 1000; transform: translateX(0); transition: transform 0.2s ease-out; }
+#panel.hidden { transform: translateX(100%); pointer-events: none; }
+#panel-close { position: absolute; top: 16px; right: 16px; width: 28px; height: 28px; border: none; background: transparent; font-size: 20px; color: rgba(255, 255, 255, 0.5); cursor: pointer; border-radius: 4px; z-index: 1; }
+#panel-close:hover { color: #ffffff; }
+#panel-content { height: 100%; overflow-y: auto; padding: 24px 32px; }
+#panel-title { font-size: 16px; font-weight: 600; color: #ffffff; margin: 0 0 16px 0; line-height: 1.4; }
+#panel-details { font-size: 14px; line-height: 1.6; color: rgba(255, 255, 255, 0.85); }
+#panel-details.has-tasks { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #3B3B4B; }
+#panel-details h1, #panel-details h2, #panel-details h3 { color: #ffffff; margin: 1.2em 0 0.5em 0; font-weight: 600; }
+#panel-details h1:first-child, #panel-details h2:first-child, #panel-details h3:first-child, #panel-details p:first-child { margin-top: 0; }
+#panel-details h1 { font-size: 1.3em; }
+#panel-details h2 { font-size: 1.15em; }
+#panel-details h3 { font-size: 1em; }
+#panel-details p { margin: 0.8em 0; }
+#panel-details ul, #panel-details ol { margin: 0.8em 0; padding-left: 1.5em; }
+#panel-details li { margin: 0.4em 0; }
+#panel-details code { font-family: 'SF Mono', Monaco, monospace; font-size: 0.9em; background: #363646; padding: 0.15em 0.4em; border-radius: 3px; }
+#panel-details pre { background: #363646; padding: 12px 16px; border-radius: 6px; overflow-x: auto; margin: 1em 0; }
+#panel-details pre code { background: none; padding: 0; }
+#panel-details blockquote { border-left: 2px solid #3B3B4B; padding-left: 12px; margin: 1em 0; color: rgba(255, 255, 255, 0.5); }
+#panel-details a { color: #3b82f6; text-decoration: none; }
+#panel-details a:hover { text-decoration: underline; }
+#panel-tasks h3 { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
+.task-item { display: flex; align-items: flex-start; padding: 8px 0; }
+.task-checkbox { width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 3px; margin-right: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.task-checkbox.done { background: #10b981; border-color: #10b981; }
+.task-checkbox.done::after { content: '\2713'; color: white; font-size: 10px; font-weight: bold; }
+.task-text { font-size: 14px; color: rgba(255, 255, 255, 0.85); line-height: 1.4; }
+.task-text.done { color: rgba(255, 255, 255, 0.5); text-decoration: line-through; }
+#overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 999; transition: opacity 0.2s ease-out; }
+#overlay.hidden { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <svg id="mindmap" width="861" height="1457" viewBox="0 0 861 1457">
+            <defs>
+                <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+                </filter>
+            </defs>
+            <rect width="100%" height="100%" fill="#1D1D2D"/>
+            <g transform="translate(122.89805483818054, 728.5)">
+                <g class="connections">
+                                <path d="M 239.4622571728109 25.0 C 278.7955905061442 25.0, 239.4622571728109 50.0, 298.4622571728109 50.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 239.4622571728109 25.0 C 278.7955905061442 25.0, 239.4622571728109 0.0, 298.4622571728109 0.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 200.0 C 292.6866410898018 200.0, 253.3533077564685 250.0, 312.3533077564685 250.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 200.0 C 292.6866410898018 200.0, 253.3533077564685 300.0, 312.3533077564685 300.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 -600.0 C 292.6866410898018 -600.0, 253.3533077564685 -550.0, 312.3533077564685 -550.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 279.8662760647354 450.0 C 319.19960939806873 450.0, 279.8662760647354 500.0, 338.8662760647354 500.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 354.1300490162252 -450.0 C 393.4633823495586 -450.0, 354.1300490162252 -500.0, 413.13004901622526 -500.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 239.4622571728109 -275.0 C 278.7955905061442 -275.0, 239.4622571728109 -300.0, 298.4622571728109 -300.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 375.1509356758474 -300.0 C 414.48426900918076 -300.0, 375.1509356758474 -350.0, 434.15093567584745 -350.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 0.0 0.0 C 81.26536989212038 0.0, 0.0 350.0, 121.89805483818056 350.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 200.0 C 292.6866410898018 200.0, 253.3533077564685 100.0, 312.3533077564685 100.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 189.68015600549575 600.0 L 248.68015600549575 600.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 375.1509356758474 -300.0 C 414.4842690091807 -300.0, 375.1509356758474 -250.0, 434.1509356758474 -250.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 394.02645950744125 0.0 L 453.02645950744125 0.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 0.0 0.0 C 81.26536989212036 0.0, 0.0 200.0, 121.89805483818054 200.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 412.3583510311661 500.0 L 471.3583510311661 500.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 239.4622571728109 -275.0 C 278.7955905061442 -275.0, 239.4622571728109 -75.0, 298.4622571728109 -75.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 0.0 0.0 C 81.26536989212036 0.0, 0.0 -275.0, 121.89805483818054 -275.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 0.0 0.0 C 81.26536989212038 0.0, 0.0 600.0, 121.89805483818056 600.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 279.8662760647354 450.0 C 319.19960939806873 450.0, 279.8662760647354 400.0, 338.8662760647354 400.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 508.6942513508556 -425.0 C 548.0275846841889 -425.0, 508.6942513508556 -450.0, 567.6942513508557 -450.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 394.02645950744125 -175.0 C 433.35979284077456 -175.0, 394.02645950744125 -150.0, 453.02645950744125 -150.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 0.0 0.0 C 81.26536989212036 0.0, 0.0 -600.0, 121.89805483818054 -600.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 -600.0 L 312.3533077564685 -600.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 406.6483772320506 400.0 L 465.6483772320506 400.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 354.1300490162252 -450.0 C 393.4633823495586 -450.0, 354.1300490162252 -425.0, 413.13004901622526 -425.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 189.68015600549575 600.0 C 229.0134893388291 600.0, 189.68015600549575 650.0, 248.68015600549575 650.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 366.24435834012604 -75.0 C 405.5776916734594 -75.0, 366.24435834012604 -50.0, 425.2443583401261 -50.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 200.0 C 292.6866410898018 200.0, 253.3533077564685 150.0, 312.3533077564685 150.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 279.8662760647354 450.0 L 338.8662760647354 450.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 239.4622571728109 -275.0 C 278.7955905061442 -275.0, 239.4622571728109 -450.0, 298.4622571728109 -450.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 0.0 0.0 C 81.26536989212036 0.0, 0.0 25.0, 121.89805483818054 25.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 200.0 L 312.3533077564685 200.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 394.02645950744125 -175.0 C 433.35979284077456 -175.0, 394.02645950744125 -200.0, 453.0264595074412 -200.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 239.4622571728109 -275.0 C 278.7955905061442 -275.0, 239.4622571728109 -175.0, 298.4622571728109 -175.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 501.93303684316254 -300.0 L 560.9330368431627 -300.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 508.6942513508556 -425.0 C 548.0275846841889 -425.0, 508.6942513508556 -400.0, 567.6942513508557 -400.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 0.0 0.0 C 81.26536989212035 0.0, 0.0 450.0, 121.89805483818053 450.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 253.3533077564685 -600.0 C 292.6866410898018 -600.0, 253.3533077564685 -650.0, 312.3533077564685 -650.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 189.68015600549575 600.0 C 229.0134893388291 600.0, 189.68015600549575 550.0, 248.68015600549575 550.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 375.1509356758474 -300.0 L 434.1509356758474 -300.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+            <path d="M 366.24435834012604 -75.0 C 405.5776916734594 -75.0, 366.24435834012604 -100.0, 425.2443583401261 -100.0" fill="none" stroke="#CBA6F7" stroke-width="1.5"/>
+
+                </g>
+                <g class="cross-links">
+                    
+                </g>
+                <g class="nodes">
+                                <g class="node" data-node-id="3103447D-217F-407C-9817-793F2E3CF174" style="">
+                <rect x="298.4622571728109" y="31.5" width="95.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="346.24435834012604" y="55.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">节点管理</text>
+                
+            </g>
+            <g class="node" data-node-id="39FF774F-2114-4C3E-A839-08FEFBB26979" style="">
+                <rect x="298.4622571728109" y="-18.5" width="95.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="346.24435834012604" y="5.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">节点发现</text>
+                
+            </g>
+            <g class="node" data-node-id="3EAABE7E-C429-404E-B188-5A531AB099DA" style="">
+                <rect x="312.3533077564685" y="231.5" width="95.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="360.13540892378364" y="255.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">钱包数据</text>
+                
+            </g>
+            <g class="node" data-node-id="5C65FE06-A478-4775-9263-776BD0F7FF69" style="">
+                <rect x="312.3533077564685" y="281.5" width="81.67315175097276" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="353.1898836319549" y="305.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">密钥对</text>
+                
+            </g>
+            <g class="node" data-node-id="55BEB8BA-6D0F-4B4A-A082-FEE4681B282A" style="">
+                <rect x="312.3533077564685" y="-568.5" width="117.24967527389526" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="370.9781453934161" y="-545.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">RIPEMD160</text>
+                
+            </g>
+            <g class="node" data-node-id="A11ECDF7-6B3A-43D8-81FD-34C4FE0F0F4B" style="">
+                <rect x="338.8662760647354" y="481.5" width="73.49207496643066" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="375.61231354795075" y="505.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">atom</text>
+                
+            </g>
+            <g class="node" data-node-id="FA57F075-B926-49BD-B08D-9DEAC9B7876C" style="">
+                <rect x="413.13004901622526" y="-518.5" width="109.45525291828794" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="467.8576754753692" y="-495.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">签名与验证</text>
+                
+            </g>
+            <g class="node" data-node-id="024DCD49-BF05-4F3C-9DA4-E5A5A8DBD9E4" style="">
+                <rect x="298.4622571728109" y="-318.5" width="76.6886785030365" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="336.80659642432914" y="-295.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">Block</text>
+                
+            </g>
+            <g class="node" data-node-id="2E3E2CCF-9BEB-4238-88F8-FE9EB52B597C" style="">
+                <rect x="434.15093567584745" y="-368.5" width="109.45525291828794" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="488.8785621349914" y="-345.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">挖矿与验证</text>
+                
+            </g>
+            <g class="node" data-node-id="03092EF8-C146-44C4-8E46-C583F3F2F219" style="">
+                <rect x="121.89805483818056" y="331.5" width="105.67819596635692" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="174.73715282135902" y="355.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">UI模块</text>
+                
+            </g>
+            <g class="node" data-node-id="6E5A0EB3-F96E-4FFC-BD73-A3C6ACF5FEF0" style="">
+                <rect x="312.3533077564685" y="81.5" width="145.0054991699842" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="384.8560573414606" y="105.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">序列化/反序列化</text>
+                
+            </g>
+            <g class="node" data-node-id="A0FD40AD-8AB1-44CF-BC31-7311C72B1C17" style="">
+                <rect x="248.68015600549575" y="581.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="282.57120658915335" y="605.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">安全</text>
+                
+            </g>
+            <g class="node" data-node-id="53B1E1CF-7393-4A6F-813E-3C97102F0C07" style="">
+                <rect x="434.1509356758474" y="-268.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="468.041986259505" y="-245.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">孤块</text>
+                
+            </g>
+            <g class="node" data-node-id="637C3B5B-B82E-4860-9EFA-AE93A4824FA4" style="">
+                <rect x="453.02645950744125" y="-18.5" width="134.09353375434875" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="520.0732263846156" y="5.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">IRC/DNS Seed</text>
+                
+            </g>
+            <g class="node" data-node-id="1E07A082-F167-4012-867D-DE1F0AD0E199" style="">
+                <rect x="121.89805483818054" y="181.5" width="131.45525291828795" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="187.62568129732452" y="205.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">📄 数据库模块</text>
+                
+            </g>
+            <g class="node" data-node-id="56CB4BED-5E3A-446C-A72C-6BF062416C50" style="">
+                <rect x="471.3583510311661" y="481.5" width="95.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="519.1404521984813" y="505.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">流转机制</text>
+                
+            </g>
+            <g class="node" data-node-id="AA998AC8-9402-40D3-BE7A-C73CA28C2625" style="">
+                <rect x="298.4622571728109" y="-93.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="332.3533077564685" y="-70.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">挖矿</text>
+                
+            </g>
+            <g class="node" data-node-id="2939AE7F-C23B-4C76-B6D5-CF01583D8932" style="">
+                <rect x="121.89805483818054" y="-293.5" width="117.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="180.68015600549572" y="-270.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">💻 交易模块</text>
+                
+            </g>
+            <g class="node" data-node-id="FB575110-BD09-436A-88B1-D7EC9FAA1685" style="">
+                <rect x="121.89805483818056" y="581.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="155.78910542183814" y="605.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">其他</text>
+                
+            </g>
+            <g class="node" data-node-id="8B742104-4B7F-4108-9673-BEC6AF4A9183" style="">
+                <rect x="338.8662760647354" y="381.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="372.757326648393" y="405.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">商品</text>
+                
+            </g>
+            <g class="node" data-node-id="05C9988E-C165-433C-847D-B069385EF883" style="">
+                <rect x="567.6942513508557" y="-468.5" width="109.45525291828794" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="622.4218778099996" y="-445.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">默克尔路径</text>
+                
+            </g>
+            <g class="node" data-node-id="B14763B6-AA28-4519-8B74-0B8FE77BC151" style="">
+                <rect x="453.02645950744125" y="-168.5" width="109.45525291828794" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="507.7540859665852" y="-145.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">下推自动机</text>
+                
+            </g>
+            <g class="node" data-node-id="C5EAE5BA-E7CA-441C-8C40-59D59EB87C37" style="">
+                <rect x="121.89805483818054" y="-618.5" width="131.45525291828795" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="187.62568129732452" y="-595.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">密码学模块</text>
+                
+            </g>
+            <g class="node" data-node-id="CEF32026-0EFE-4D75-B79E-8AF1032E1D51" style="">
+                <rect x="312.3533077564685" y="-618.5" width="87.00181841850281" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="355.8542169657199" y="-595.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">ECDSA</text>
+                
+            </g>
+            <g class="node" data-node-id="8D7805CF-47C3-4B6F-98F8-9A11707D89A6" style="">
+                <rect x="465.6483772320506" y="381.5" width="123.34630350194553" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="527.3215289830234" y="405.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">中间会面机制</text>
+                
+            </g>
+            <g class="node" data-node-id="76F74F41-71C9-4E0F-B289-528712BE95C9" style="">
+                <rect x="413.13004901622526" y="-443.5" width="95.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="460.91215018354046" y="-420.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">默克尔树</text>
+                
+            </g>
+            <g class="node" data-node-id="B261E596-5D57-4B6E-8AD7-A8ADA031056C" style="">
+                <rect x="248.68015600549575" y="631.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="282.57120658915335" y="655.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">编译</text>
+                
+            </g>
+            <g class="node" data-node-id="5055A8D7-9918-46B4-8A08-FE77208FF67A" style="">
+                <rect x="425.2443583401261" y="-68.5" width="109.45525291828794" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="479.97198479927005" y="-45.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">工作量证明</text>
+                
+            </g>
+            <g class="node" data-node-id="D2AD05BD-60A8-42C9-B2CC-CFDD8DB0871A" style="">
+                <rect x="312.3533077564685" y="131.5" width="123.34630350194553" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="374.02645950744125" y="155.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">区块数据存储</text>
+                
+            </g>
+            <g class="node" data-node-id="99242CD1-A7B8-42E9-B697-29916A1A88C2" style="">
+                <rect x="338.8662760647354" y="431.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="372.757326648393" y="455.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">评论</text>
+                
+            </g>
+            <g class="node" data-node-id="3E8F33A2-F45D-4A0A-ABFE-84F294CB6D1E" style="">
+                <rect x="298.4622571728109" y="-468.5" width="55.66779184341431" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="326.29615309451805" y="-445.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">Tx</text>
+                
+            </g>
+            <g class="node" data-node-id="CDAFAD7F-33CC-45D2-BCBA-79E810B4FFE2" style="">
+                <rect x="121.89805483818054" y="6.5" width="117.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="180.68015600549572" y="30.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">网络模块</text>
+                
+            </g>
+            <g class="node" data-node-id="0DB2006E-A093-4DDB-BB93-DCD903E0EE8A" style="">
+                <rect x="312.3533077564685" y="181.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="346.2443583401261" y="205.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">索引</text>
+                
+            </g>
+            <g class="node" data-node-id="38E2112F-7FF2-4777-A5A0-8EC718118437" style="">
+                <rect x="453.0264595074412" y="-218.5" width="81.67315175097276" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="493.8630353829276" y="-195.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">操作码</text>
+                
+            </g>
+            <g class="node" data-node-id="8AED32D3-D654-4370-AE82-31D272F31039" style="">
+                <rect x="298.4622571728109" y="-193.5" width="95.56420233463035" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="346.24435834012604" y="-170.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">脚本模块</text>
+                
+            </g>
+            <g class="node" data-node-id="7FD40749-DD9B-4C6C-8DA3-30D382B28949" style="">
+                <rect x="560.9330368431627" y="-318.5" width="109.45525291828794" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="615.6606633023066" y="-295.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">最长链原则</text>
+                
+            </g>
+            <g class="node" data-node-id="235A3E6D-EBFB-49B7-8DCE-5D04D33D4B4F" style="">
+                <rect x="567.6942513508557" y="-418.5" width="110.85423018496324" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="623.1213664433373" y="-395.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">SPV轻节点</text>
+                
+            </g>
+            <g class="node" data-node-id="F394226B-A781-49DB-ACE7-FB0AFD4FE6C9" style="">
+                <rect x="-62.89805483818054" y="-24.5" width="125.79610967636108" height="49.0" rx="10.0" fill="#FAB387" filter="url(#shadow)"/>
+                <text x="0.0" y="5.0"
+                      class="node-text root-text" fill="#1D1D2D" text-anchor="middle">bitcoin0.1</text>
+                
+            </g>
+            <g class="node" data-node-id="95FBB865-2274-4064-AF6C-98210066BC6B" style="">
+                <rect x="121.89805483818053" y="431.5" width="157.9682212265549" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="200.88216545145798" y="455.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">👥 市场模块(实验)</text>
+                
+            </g>
+            <g class="node" data-node-id="EFE0C92E-2E3B-4D8E-B653-9208BBD8B008" style="">
+                <rect x="312.3533077564685" y="-668.5" width="98.90834760665894" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="361.80748155979796" y="-645.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">SHA 256</text>
+                
+            </g>
+            <g class="node" data-node-id="5A55E650-7662-4C3A-9B5C-B4EF477016EB" style="">
+                <rect x="248.68015600549575" y="531.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="282.57120658915335" y="555.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">依赖</text>
+                
+            </g>
+            <g class="node" data-node-id="88EE65B6-E19F-4706-A8AC-8E9766BA4242" style="">
+                <rect x="434.1509356758474" y="-318.5" width="67.78210116731518" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="468.041986259505" y="-295.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">分叉</text>
+                
+            </g>
+            <g class="node interactive" data-node-id="B25716C7-6672-4F44-9AF4-D0BF641F9689" style="cursor: pointer;">
+                <rect x="425.2443583401261" y="-118.5" width="145.34630350194553" height="37.0" rx="8.0" fill="#303144" filter="url(#shadow)"/>
+                <text x="497.91751009109885" y="-95.0"
+                      class="node-text child-text" fill="#CDD6F4" text-anchor="middle">难度调整机制</text>
+                <circle cx="564.5906618420717" cy="-112.5" r="4" fill="#3B82F6" class="indicator-dot"/>
+            </g>
+
+                </g>
+            </g>
+        </svg>
+    </div>
+
+    <div id="panel" class="hidden">
+        <button id="panel-close" aria-label="Close panel">&times;</button>
+        <div id="panel-content">
+            <h1 id="panel-title"></h1>
+            <div id="panel-details"></div>
+            <div id="panel-tasks"></div>
+        </div>
+    </div>
+
+    <div id="overlay" class="hidden"></div>
+
+    <script>
+        const nodesData = [{"hasTasks":false,"done":false,"hasDetails":false,"height":37,"x":298.46225717281089,"id":"3103447D-217F-407C-9817-793F2E3CF174","topic":"节点管理","y":31.5,"isRoot":false,"width":95.564202334630352},{"topic":"节点发现","id":"39FF774F-2114-4C3E-A839-08FEFBB26979","hasTasks":false,"y":-18.5,"isRoot":false,"done":false,"hasDetails":false,"x":298.46225717281089,"width":95.564202334630352,"height":37},{"hasTasks":false,"topic":"钱包数据","hasDetails":false,"x":312.3533077564685,"id":"3EAABE7E-C429-404E-B188-5A531AB099DA","y":231.5,"width":95.564202334630352,"height":37,"isRoot":false,"done":false},{"id":"5C65FE06-A478-4775-9263-776BD0F7FF69","topic":"密钥对","width":81.673151750972764,"x":312.3533077564685,"done":false,"height":37,"hasTasks":false,"y":281.5,"hasDetails":false,"isRoot":false},{"hasTasks":false,"isRoot":false,"id":"55BEB8BA-6D0F-4B4A-A082-FEE4681B282A","topic":"RIPEMD160","y":-568.5,"hasDetails":false,"x":312.3533077564685,"height":37,"width":117.24967527389526,"done":false},{"id":"A11ECDF7-6B3A-43D8-81FD-34C4FE0F0F4B","done":false,"y":481.5,"x":338.86627606473542,"hasDetails":false,"hasTasks":false,"isRoot":false,"width":73.492074966430664,"topic":"atom","height":37},{"topic":"签名与验证","hasDetails":false,"y":-518.5,"width":109.45525291828794,"isRoot":false,"x":413.13004901622526,"done":false,"id":"FA57F075-B926-49BD-B08D-9DEAC9B7876C","height":37,"hasTasks":false},{"width":76.688678503036499,"hasTasks":false,"done":false,"topic":"Block","y":-318.5,"x":298.46225717281089,"id":"024DCD49-BF05-4F3C-9DA4-E5A5A8DBD9E4","hasDetails":false,"isRoot":false,"height":37},{"id":"2E3E2CCF-9BEB-4238-88F8-FE9EB52B597C","topic":"挖矿与验证","y":-368.5,"hasTasks":false,"isRoot":false,"done":false,"height":37,"x":434.15093567584745,"width":109.45525291828794,"hasDetails":false},{"id":"03092EF8-C146-44C4-8E46-C583F3F2F219","hasTasks":false,"isRoot":false,"done":false,"hasDetails":false,"height":37,"topic":"UI模块","width":105.67819596635692,"x":121.89805483818056,"y":331.5},{"y":81.5,"width":145.0054991699842,"done":false,"x":312.3533077564685,"hasDetails":false,"height":37,"id":"6E5A0EB3-F96E-4FFC-BD73-A3C6ACF5FEF0","isRoot":false,"hasTasks":false,"topic":"序列化\/反序列化"},{"width":67.782101167315176,"isRoot":false,"done":false,"hasTasks":false,"topic":"安全","hasDetails":false,"x":248.68015600549575,"id":"A0FD40AD-8AB1-44CF-BC31-7311C72B1C17","y":581.5,"height":37},{"hasDetails":false,"height":37,"topic":"孤块","x":434.15093567584739,"y":-268.5,"id":"53B1E1CF-7393-4A6F-813E-3C97102F0C07","isRoot":false,"done":false,"hasTasks":false,"width":67.782101167315176},{"isRoot":false,"id":"637C3B5B-B82E-4860-9EFA-AE93A4824FA4","topic":"IRC\/DNS Seed","done":false,"hasTasks":false,"x":453.02645950744125,"width":134.09353375434875,"y":-18.5,"hasDetails":false,"height":37},{"id":"1E07A082-F167-4012-867D-DE1F0AD0E199","done":false,"hasDetails":false,"x":121.89805483818054,"isRoot":false,"hasTasks":false,"y":181.5,"width":131.45525291828795,"height":37,"topic":"数据库模块"},{"height":37,"hasTasks":false,"width":95.564202334630352,"y":481.5,"x":471.35835103116608,"topic":"流转机制","isRoot":false,"hasDetails":false,"done":false,"id":"56CB4BED-5E3A-446C-A72C-6BF062416C50"},{"x":298.46225717281089,"width":67.782101167315176,"hasDetails":false,"height":37,"done":false,"isRoot":false,"hasTasks":false,"id":"AA998AC8-9402-40D3-BE7A-C73CA28C2625","y":-93.5,"topic":"挖矿"},{"hasTasks":false,"topic":"交易模块","isRoot":false,"height":37,"x":121.89805483818054,"hasDetails":false,"y":-293.5,"done":false,"id":"2939AE7F-C23B-4C76-B6D5-CF01583D8932","width":117.56420233463035},{"hasTasks":false,"topic":"其他","isRoot":false,"hasDetails":false,"y":581.5,"done":false,"height":37,"id":"FB575110-BD09-436A-88B1-D7EC9FAA1685","x":121.89805483818056,"width":67.782101167315176},{"y":381.5,"height":37,"hasDetails":false,"isRoot":false,"hasTasks":false,"topic":"商品","x":338.86627606473542,"done":false,"width":67.782101167315176,"id":"8B742104-4B7F-4108-9673-BEC6AF4A9183"},{"hasTasks":false,"isRoot":false,"y":-468.5,"hasDetails":false,"width":109.45525291828794,"height":37,"id":"05C9988E-C165-433C-847D-B069385EF883","topic":"默克尔路径","done":false,"x":567.69425135085567},{"height":37,"id":"B14763B6-AA28-4519-8B74-0B8FE77BC151","y":-168.5,"done":false,"x":453.02645950744125,"width":109.45525291828794,"isRoot":false,"hasDetails":false,"hasTasks":false,"topic":"下推自动机"},{"id":"C5EAE5BA-E7CA-441C-8C40-59D59EB87C37","width":131.45525291828795,"hasTasks":false,"y":-618.5,"hasDetails":false,"height":37,"isRoot":false,"topic":"密码学模块","done":false,"x":121.89805483818054},{"height":37,"y":-618.5,"hasDetails":false,"hasTasks":false,"isRoot":false,"id":"CEF32026-0EFE-4D75-B79E-8AF1032E1D51","topic":"ECDSA","x":312.3533077564685,"done":false,"width":87.001818418502808},{"hasDetails":false,"done":false,"y":381.5,"id":"8D7805CF-47C3-4B6F-98F8-9A11707D89A6","x":465.64837723205062,"width":123.34630350194553,"isRoot":false,"topic":"中间会面机制","hasTasks":false,"height":37},{"id":"76F74F41-71C9-4E0F-B289-528712BE95C9","x":413.13004901622526,"y":-443.5,"width":95.564202334630352,"height":37,"hasDetails":false,"topic":"默克尔树","hasTasks":false,"isRoot":false,"done":false},{"hasTasks":false,"y":631.5,"done":false,"topic":"编译","height":37,"isRoot":false,"width":67.782101167315176,"id":"B261E596-5D57-4B6E-8AD7-A8ADA031056C","hasDetails":false,"x":248.68015600549575},{"x":425.2443583401261,"id":"5055A8D7-9918-46B4-8A08-FE77208FF67A","topic":"工作量证明","y":-68.5,"width":109.45525291828794,"done":false,"hasTasks":false,"isRoot":false,"hasDetails":false,"height":37},{"done":false,"x":312.3533077564685,"hasDetails":false,"topic":"区块数据存储","isRoot":false,"y":131.5,"height":37,"width":123.34630350194553,"hasTasks":false,"id":"D2AD05BD-60A8-42C9-B2CC-CFDD8DB0871A"},{"hasTasks":false,"isRoot":false,"y":431.5,"id":"99242CD1-A7B8-42E9-B697-29916A1A88C2","x":338.86627606473542,"width":67.782101167315176,"height":37,"hasDetails":false,"done":false,"topic":"评论"},{"height":37,"width":55.667791843414307,"id":"3E8F33A2-F45D-4A0A-ABFE-84F294CB6D1E","done":false,"hasDetails":false,"isRoot":false,"hasTasks":false,"topic":"Tx","x":298.46225717281089,"y":-468.5},{"height":37,"topic":"网络模块","isRoot":false,"hasDetails":false,"x":121.89805483818054,"y":6.5,"hasTasks":false,"width":117.56420233463035,"done":false,"id":"CDAFAD7F-33CC-45D2-BCBA-79E810B4FFE2"},{"hasDetails":false,"id":"0DB2006E-A093-4DDB-BB93-DCD903E0EE8A","x":312.3533077564685,"topic":"索引","y":181.5,"width":67.782101167315176,"isRoot":false,"height":37,"done":false,"hasTasks":false},{"x":453.02645950744119,"isRoot":false,"done":false,"width":81.673151750972764,"height":37,"id":"38E2112F-7FF2-4777-A5A0-8EC718118437","y":-218.5,"hasTasks":false,"topic":"操作码","hasDetails":false},{"x":298.46225717281089,"hasTasks":false,"y":-193.5,"topic":"脚本模块","done":false,"id":"8AED32D3-D654-4370-AE82-31D272F31039","width":95.564202334630352,"isRoot":false,"height":37,"hasDetails":false},{"hasDetails":false,"x":560.93303684316265,"y":-318.5,"done":false,"height":37,"id":"7FD40749-DD9B-4C6C-8DA3-30D382B28949","topic":"最长链原则","hasTasks":false,"isRoot":false,"width":109.45525291828794},{"id":"235A3E6D-EBFB-49B7-8DCE-5D04D33D4B4F","y":-418.5,"hasTasks":false,"x":567.69425135085567,"done":false,"isRoot":false,"width":110.85423018496324,"topic":"SPV轻节点","hasDetails":false,"height":37},{"hasTasks":false,"y":-24.5,"width":125.79610967636108,"height":49,"done":false,"hasDetails":false,"x":-62.898054838180542,"color":"orange","topic":"bitcoin0.1","id":"F394226B-A781-49DB-ACE7-FB0AFD4FE6C9","isRoot":true},{"hasTasks":false,"hasDetails":false,"done":false,"y":431.5,"isRoot":false,"height":37,"x":121.89805483818053,"id":"95FBB865-2274-4064-AF6C-98210066BC6B","width":157.9682212265549,"topic":"市场模块(实验)"},{"x":312.3533077564685,"height":37,"hasDetails":false,"hasTasks":false,"topic":"SHA 256","width":98.908347606658936,"isRoot":false,"id":"EFE0C92E-2E3B-4D8E-B653-9208BBD8B008","y":-668.5,"done":false},{"hasDetails":false,"done":false,"isRoot":false,"x":248.68015600549575,"height":37,"topic":"依赖","y":531.5,"id":"5A55E650-7662-4C3A-9B5C-B4EF477016EB","width":67.782101167315176,"hasTasks":false},{"topic":"分叉","hasTasks":false,"y":-318.5,"x":434.15093567584739,"isRoot":false,"hasDetails":false,"width":67.782101167315176,"height":37,"done":false,"id":"88EE65B6-E19F-4706-A8AC-8E9766BA4242"},{"details":"tags: []\ntitle: temp\ndate: 2026-03-31 09:27:34\nupdated: 2026-03-31 09:27:42\nBitcoin0.1\n\t•\t密码学模块\n\t◦\tSHA 256\n\t◦\tECDSA\n\t◦\tRIPEMD160\n\t•\t交易模块\n\t◦\tTx\n\t◦\t签名与验证\n\t◦\t默克尔树\n\t▪\t默克尔路径\n\t▪\tSPV 轻节点\n\t◦\tBlock\n\t◦\t挖矿与验证\n\t◦\t分叉\n\t▪\t最长链原则\n\t◦\t孤块\n\t◦\t脚本模块\n\t◦\t操作码\n\t◦\t下推自动机\n\t◦\t工作量证明\n\t◦\t难度调整机制\n\t•\t网络模块\n\t◦\t节点发现\n\t◦\tIRC\/DNS Seed\n\t•\t数据库模块\n\t◦\t序列化\/反序列化\n\t◦\t区块数据存储\n\t◦\t索引\n\t◦\t钱包数据\n\t◦\t密钥对\n\t•\tUI 模块\n\t•\t市场模块 (实验)\n\t◦\t商品\n\t◦\t中间会面机制\n\t◦\t评论\n\t◦\tatom\n\t◦\t流转机制\n\ntags: []\ntitle: temp\ndate: 2026-03-31 09:27:34\nupdated: 2026-03-31 09:27:42\nBitcoin0.1\n\t•\t密码学模块\n\t◦\tSHA 256\n\t◦\tECDSA\n\t◦\tRIPEMD160\n\t•\t交易模块\n\t◦\tTx\n\t◦\t签名与验证\n\t◦\t默克尔树\n\t▪\t默克尔路径\n\t▪\tSPV 轻节点\n\t◦\tBlock\n\t◦\t挖矿与验证\n\t◦\t分叉\n\t▪\t最长链原则\n\t◦\t孤块\n\t◦\t脚本模块\n\t◦\t操作码\n\t◦\t下推自动机\n\t◦\t工作量证明\n\t◦\t难度调整机制\n\t•\t网络模块\n\t◦\t节点发现\n\t◦\tIRC\/DNS Seed\n\t•\t数据库模块\n\t◦\t序列化\/反序列化\n\t◦\t区块数据存储\n\t◦\t索引\n\t◦\t钱包数据\n\t◦\t密钥对\n\t•\tUI 模块\n\t•\t市场模块 (实验)\n\t◦\t商品\n\t◦\t中间会面机制\n\t◦\t评论\n\t◦\tatom\n\t◦\t流转机制\n\ntags: []\ntitle: temp\ndate: 2026-03-31 09:27:34\nupdated: 2026-03-31 09:27:42\nBitcoin0.1\n\t•\t密码学模块\n\t◦\tSHA 256\n\t◦\tECDSA\n\t◦\tRIPEMD160\n\t•\t交易模块\n\t◦\tTx\n\t◦\t签名与验证\n\t◦\t默克尔树\n\t▪\t默克尔路径\n\t▪\tSPV 轻节点\n\t◦\tBlock\n\t◦\t挖矿与验证\n\t◦\t分叉\n\t▪\t最长链原则\n\t◦\t孤块\n\t◦\t脚本模块\n\t◦\t操作码\n\t◦\t下推自动机\n\t◦\t工作量证明\n\t◦\t难度调整机制\n\t•\t网络模块\n\t◦\t节点发现\n\t◦\tIRC\/DNS Seed\n\t•\t数据库模块\n\t◦\t序列化\/反序列化\n\t◦\t区块数据存储\n\t◦\t索引\n\t◦\t钱包数据\n\t◦\t密钥对\n\t•\tUI 模块\n\t•\t市场模块 (实验)\n\t◦\t商品\n\t◦\t中间会面机制\n\t◦\t评论\n\t◦\tatom\n\t◦\t流转机制\n\ntags: []\ntitle: temp\ndate: 2026-03-31 09:27:34\nupdated: 2026-03-31 09:27:42\nBitcoin0.1\n\t•\t密码学模块\n\t◦\tSHA 256\n\t◦\tECDSA\n\t◦\tRIPEMD160\n\t•\t交易模块\n\t◦\tTx\n\t◦\t签名与验证\n\t◦\t默克尔树\n\t▪\t默克尔路径\n\t▪\tSPV 轻节点\n\t◦\tBlock\n\t◦\t挖矿与验证\n\t◦\t分叉\n\t▪\t最长链原则\n\t◦\t孤块\n\t◦\t脚本模块\n\t◦\t操作码\n\t◦\t下推自动机\n\t◦\t工作量证明\n\t◦\t难度调整机制\n\t•\t网络模块\n\t◦\t节点发现\n\t◦\tIRC\/DNS Seed\n\t•\t数据库模块\n\t◦\t序列化\/反序列化\n\t◦\t区块数据存储\n\t◦\t索引\n\t◦\t钱包数据\n\t◦\t密钥对\n\t•\tUI 模块\n\t•\t市场模块 (实验)\n\t◦\t商品\n\t◦\t中间会面机制\n\t◦\t评论\n\t◦\tatom\n\t◦\t流转机制","done":false,"hasTasks":false,"x":425.2443583401261,"hasDetails":true,"topic":"难度调整机制","id":"B25716C7-6672-4F44-9AF4-D0BF641F9689","y":-118.5,"isRoot":false,"height":37,"width":145.34630350194553}];
+        (function() {
+    const container = document.getElementById('container');
+    const panel = document.getElementById('panel');
+    const overlay = document.getElementById('overlay');
+    const panelTitle = document.getElementById('panel-title');
+    const panelDetails = document.getElementById('panel-details');
+    const panelTasks = document.getElementById('panel-tasks');
+    const panelClose = document.getElementById('panel-close');
+
+    const nodesMap = {};
+    nodesData.forEach(node => {
+        nodesMap[node.id] = node;
+    });
+
+    document.querySelectorAll('.node.interactive').forEach(nodeEl => {
+        nodeEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nodeId = nodeEl.dataset.nodeId;
+            const node = nodesMap[nodeId];
+            if (node) {
+                showPanel(node);
+            }
+        });
+    });
+
+    function renderMarkdown(text) {
+        if (!text) return '';
+
+        const lines = text.split('\n');
+        let html = [];
+        let i = 0;
+
+        while (i < lines.length) {
+            const line = lines[i];
+
+            if (/^```/.test(line)) {
+                let codeLines = [];
+                i++;
+                while (i < lines.length && !/^```/.test(lines[i])) {
+                    codeLines.push(escapeHtml(lines[i]));
+                    i++;
+                }
+                html.push('<pre><code>' + codeLines.join('\n') + '</code></pre>');
+                i++;
+                continue;
+            }
+
+            if (/^#{1,6} /.test(line)) {
+                const match = line.match(/^(#{1,6}) (.+)$/);
+                if (match) {
+                    const level = match[1].length;
+                    html.push('<h' + level + '>' + formatInline(match[2]) + '</h' + level + '>');
+                }
+                i++;
+                continue;
+            }
+
+            if (/^>/.test(line)) {
+                let quoteLines = [];
+                while (i < lines.length && /^>/.test(lines[i])) {
+                    quoteLines.push(lines[i].replace(/^>\s?/, ''));
+                    i++;
+                }
+                html.push('<blockquote>' + formatInline(quoteLines.join(' ')) + '</blockquote>');
+                continue;
+            }
+
+            if (/^(\s*)[-*]\s/.test(line)) {
+                html.push(parseList(lines, i, 'ul'));
+                while (i < lines.length && /^(\s*)[-*]\s/.test(lines[i])) i++;
+                continue;
+            }
+
+            if (/^(\s*)\d+\.\s/.test(line)) {
+                html.push(parseList(lines, i, 'ol'));
+                while (i < lines.length && /^(\s*)\d+\.\s/.test(lines[i])) i++;
+                continue;
+            }
+
+            if (/^(-{3,}|\*{3,})$/.test(line.trim())) {
+                html.push('<hr>');
+                i++;
+                continue;
+            }
+
+            if (line.trim() === '') {
+                i++;
+                continue;
+            }
+
+            let paraLines = [];
+            while (i < lines.length && lines[i].trim() !== '' &&
+                   !/^#{1,6} /.test(lines[i]) &&
+                   !/^[-*]\s/.test(lines[i].trim()) &&
+                   !/^\d+\.\s/.test(lines[i].trim()) &&
+                   !/^>/.test(lines[i]) &&
+                   !/^```/.test(lines[i]) &&
+                   !/^(-{3,}|\*{3,})$/.test(lines[i].trim())) {
+                paraLines.push(lines[i]);
+                i++;
+            }
+            if (paraLines.length > 0) {
+                html.push('<p>' + formatInline(paraLines.join(' ')) + '</p>');
+            }
+        }
+
+        return html.join('\n');
+    }
+
+    function parseList(lines, startIndex, type) {
+        let result = [];
+        let i = startIndex;
+        let baseIndent = lines[i].match(/^(\s*)/)[1].length;
+
+        while (i < lines.length) {
+            const line = lines[i];
+            const indentMatch = line.match(/^(\s*)/);
+            const indent = indentMatch ? indentMatch[1].length : 0;
+            const listMatch = type === 'ul'
+                ? line.match(/^(\s*)[-*]\s(.*)$/)
+                : line.match(/^(\s*)\d+\.\s(.*)$/);
+
+            if (!listMatch) break;
+
+            if (indent === baseIndent) {
+                result.push('<li>' + formatInline(listMatch[2]));
+
+                if (i + 1 < lines.length) {
+                    const nextLine = lines[i + 1];
+                    const nextIndent = nextLine.match(/^(\s*)/)[1].length;
+                    const isNextList = /^(\s*)[-*]\s/.test(nextLine) || /^(\s*)\d+\.\s/.test(nextLine);
+
+                    if (isNextList && nextIndent > baseIndent) {
+                        const nestedType = /^(\s*)[-*]\s/.test(nextLine) ? 'ul' : 'ol';
+                        const nested = parseList(lines, i + 1, nestedType);
+                        result.push(nested);
+                        while (i + 1 < lines.length) {
+                            const checkLine = lines[i + 1];
+                            const checkIndent = checkLine.match(/^(\s*)/)[1].length;
+                            const checkIsList = /^(\s*)[-*]\s/.test(checkLine) || /^(\s*)\d+\.\s/.test(checkLine);
+                            if (!checkIsList || checkIndent <= baseIndent) break;
+                            i++;
+                        }
+                    }
+                }
+
+                result.push('</li>');
+            } else if (indent < baseIndent) {
+                break;
+            }
+
+            i++;
+        }
+
+        return '<' + type + '>' + result.join('') + '</' + type + '>';
+    }
+
+    function formatInline(text) {
+        let result = escapeHtml(text);
+
+        result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+        result = result.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        result = result.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+        result = result.replace(/(?<!_)_([^_]+)_(?!_)/g, '<em>$1</em>');
+        result = result.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+        result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+        return result;
+    }
+
+    function showPanel(node) {
+        panelTitle.textContent = node.topic;
+
+        const hasTasks = Array.isArray(node.tasks) && node.tasks.length > 0;
+
+        if (node.details) {
+            panelDetails.innerHTML = renderMarkdown(node.details);
+            panelDetails.classList.toggle('has-tasks', hasTasks);
+        } else {
+            panelDetails.innerHTML = '';
+            panelDetails.classList.remove('has-tasks');
+        }
+
+        if (hasTasks) {
+            let tasksHTML = '<h3>Tasks</h3>';
+            node.tasks.forEach(task => {
+                const doneClass = task.done ? ' done' : '';
+                tasksHTML += '<div class="task-item"><div class="task-checkbox' + doneClass + '"></div><span class="task-text' + doneClass + '">' + escapeHtml(task.text) + '</span></div>';
+            });
+            panelTasks.innerHTML = tasksHTML;
+        } else {
+            panelTasks.innerHTML = '';
+        }
+
+        panel.classList.remove('hidden');
+        overlay.classList.remove('hidden');
+    }
+
+    function hidePanel() {
+        panel.classList.add('hidden');
+        overlay.classList.add('hidden');
+    }
+
+    panelClose.addEventListener('click', hidePanel);
+    overlay.addEventListener('click', hidePanel);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            hidePanel();
+        }
+    });
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    let isDragging = false;
+    let startX, startY, scrollLeft, scrollTop;
+
+    container.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.node.interactive')) return;
+        isDragging = true;
+        startX = e.pageX - container.offsetLeft;
+        startY = e.pageY - container.offsetTop;
+        scrollLeft = container.scrollLeft;
+        scrollTop = container.scrollTop;
+    });
+
+    container.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        const x = e.pageX - container.offsetLeft;
+        const y = e.pageY - container.offsetTop;
+        const walkX = (x - startX) * 1.5;
+        const walkY = (y - startY) * 1.5;
+        container.scrollLeft = scrollLeft - walkX;
+        container.scrollTop = scrollTop - walkY;
+    });
+
+    container.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    container.addEventListener('mouseleave', () => {
+        isDragging = false;
+    });
+
+    const svg = document.getElementById('mindmap');
+    const viewBox = svg.viewBox.baseVal;
+    const initialScrollX = Math.max(0, (viewBox.width - window.innerWidth) / 2);
+    const initialScrollY = Math.max(0, (viewBox.height - window.innerHeight) / 2);
+    container.scrollLeft = initialScrollX;
+    container.scrollTop = initialScrollY;
+})();
+    </script>
+</body>
+</html>
