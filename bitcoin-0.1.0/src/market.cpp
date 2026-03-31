@@ -150,8 +150,8 @@ bool AddAtomsAndPropagate(uint256 hashUserStart,
       // // 为当前用户添加原子
       foreach (unsigned short nAtom, vReceived)
         user.AddAtom(nAtom, fOrigin);
-      fOrigin =
-          false; // 仅仅第一次传播的是原子原点，后续传播的原子都不是原点原子
+      // 仅仅第一次传播的是原子原点，后续传播的原子都不是原点原子
+      fOrigin = false;
 
       // Don't bother writing to disk if no changes
       // 如果当前用户的原子集合没有变化，跳过写入数据库
