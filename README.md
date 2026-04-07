@@ -1,13 +1,17 @@
 # 重读比特币核心代码
 
-## 源码阅读笔记列表
+## 源码阅读笔记
 
-1. [00-系统架构优化版](./comment/00-系统架构优化版.md)
-2. [01-uint256.h源码分析](./comment/01-uint256.h源码分析.md)
-3. [02-bignum.h源码分析](./comment/02-bignum.h源码分析)
-4. [03-base58.h源码分析](./comment/03-base58.h源码分析.md)
-5. [04-Serialize.h源码分析](./comment/04-Serialize.h源码分析.md)
-6. [05-key.h源码分析](./comment/05-key.h源码分析.md)
+- [00-系统架构优化版](./comment/00-系统架构优化版.md)
+- [01-uint256.h源码分析](./comment/01-uint256.h源码分析.md)
+- [02-bignum.h源码分析](./comment/02-bignum.h源码分析.md)
+- [03-base58.h源码分析](./comment/03-base58.h源码分析.md)
+- [04-Serialize.h源码分析](./comment/04-Serialize.h源码分析.md)
+- [05-key.h源码分析](./comment/05-key.h源码分析.md)
+- [06-main.h源码分析(一)：交易](./comment/06-main.h源码分析\(一\)：交易.md)
+- [07-main.h源码分析(二)：区块](./comment/07-main.h源码分析\(二\)：区块.md)
+- [08-main.h源码分析(三)：区块链](./comment/08-main.h源码分析\(三\)：区块链.md)
+- [09-main.h源码分析(四)：挖矿](./comment/09-main.h源码分析\(四\)：挖矿.md)
 
 ## 1. 代码版本
 
@@ -25,21 +29,13 @@
 | 0.3.18      | 2010-12-08 | [\[bitcoin-list\] Bitcoin 0.3.18 is released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/15/)\|    | [GitHub - bitcoin/bitcoin at v0.3.18](https://github.com/bitcoin/bitcoin/tree/v0.3.18) |
 | 0.3.19      | 2010-12-13 | [\[bitcoin-list\] Bitcoin 0.3.19 is released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/16/)      | [GitHub - bitcoin/bitcoin at v0.3.19](https://github.com/bitcoin/bitcoin/tree/v0.3.19) |
 
-## 2. 邮件翻译
+## 2. 重写比特币
 
-包含中本聪在多个邮件组中发布的邮件，可以更好地理解中本聪关于比特币系统的时间发展和设计决策。
+TODO: <https://github.com/MatrixYe/bitcoin-y>
 
-1. [Bitcoin P2P e-cash paper](emails/Bitcoin%20P2P%20e-cash%20paper.md)
-2. TODO: 补充其他邮件并写入emails目录
+<br />
 
 <br />
 
 > <br />
 
-## 📚 文档目录
-> 以下文件自动加载，新增 .md 文件会自动显示
-
-{% assign docs = site.static_files | where: "extname", ".md" | reject: "name", "README.md" %}
-{% for doc in docs %}
-- [{{ doc.name | remove: ".md" }}]({{ doc.path }})
-{% endfor %}
