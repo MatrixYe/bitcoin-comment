@@ -2,23 +2,22 @@
 
 ## 源码阅读笔记列表
 
-0. [00-系统架构优化版](./comment/00-系统架构优化版.md)
-1. [01-uint256.h源码分析](./comment/01-uint256.h源码分析.md)
-2. [02-bignum.h源码分析](./comment/02-bignum.h源码分析)
-3. [03-base58.h源码分析](./comment/03-base58.h源码分析.md)
-4. [04-Serialize.h源码分析](./comment/04-Serialize.h源码分析.md)
-5. [05-key.h源码分析](./comment/05-key.h源码分析.md)
-
+1. [00-系统架构优化版](./comment/00-系统架构优化版.md)
+2. [01-uint256.h源码分析](./comment/01-uint256.h源码分析.md)
+3. [02-bignum.h源码分析](./comment/02-bignum.h源码分析)
+4. [03-base58.h源码分析](./comment/03-base58.h源码分析.md)
+5. [04-Serialize.h源码分析](./comment/04-Serialize.h源码分析.md)
+6. [05-key.h源码分析](./comment/05-key.h源码分析.md)
 
 ## 1. 代码版本
+
 关于中本聪在邮件列表中提及的比特币核心代码的多个版本。现代比特币源代码可以在[比特币核心仓库](https://github.com/bitcoin/bitcoin)中找到。
 
-
-| 版本号         | 时间         | 邮件提及                                                                                                                                                               | 源代码下载                                                                                   |
+| 版本号         | 时间         | 邮件提及                                                                                                                                                             | 源代码下载                                                                                  |
 | ----------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Pre-Release | 2008-11-15 | 预览版-未知邮件                                                                                                                                                               | [bitcoin/bitcoin at nov08](https://cdn.nakamotoinstitute.org/code/bitcoin-nov08.rar)   |
+| Pre-Release | 2008-11-15 | 预览版-未知邮件                                                                                                                                                         | [bitcoin/bitcoin at nov08](https://cdn.nakamotoinstitute.org/code/bitcoin-nov08.rar)   |
 | 0.1.0       | 2009-01-11 | [\[bitcoin-list\] Bitcoin v0.1 Alpha release notes - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/6/) | [bitcoin/bitcoin at v0.1.0](https://cdn.nakamotoinstitute.org/code/bitcoin-0.1.0.rar)  |
-| 0.1.2       | 2009-01-11 | [\[bitcoin-list\] Bitcoin v0.1.2 now available - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/5/)     | 找不到                                                                                     |
+| 0.1.2       | 2009-01-11 | [\[bitcoin-list\] Bitcoin v0.1.2 now available - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/5/)     | 找不到                                                                                    |
 | 0.1.3       | 2009-01-12 | [\[bitcoin-list\] Bitcoin v0.1.3 - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/7/)                   | [bitcoin/bitcoin at v0.1.3](https://cdn.nakamotoinstitute.org/code/bitcoin-0.1.3.rar)  |
 | 0.1.5       | 2009-01-12 | [\[bitcoin-list\] Bitcoin v0.1.5 released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/9/)          | [GitHub - bitcoin/bitcoin at v0.1.5](https://github.com/bitcoin/bitcoin/tree/v0.1.5)   |
 | 0.2.0       | 2009-12-17 | [\[bitcoin-list\] Bitcoin 0.2 released - Thread \| Satoshi Nakamoto Institute](https://satoshi.nakamotoinstitute.org/emails/bitcoin-list/threads/11/)            | [GitHub - bitcoin/bitcoin at v0.2.0](https://github.com/bitcoin/bitcoin/tree/v0.2.0)   |
@@ -29,9 +28,18 @@
 ## 2. 邮件翻译
 
 包含中本聪在多个邮件组中发布的邮件，可以更好地理解中本聪关于比特币系统的时间发展和设计决策。
-1. [Bitcoin P2P e-cash paper](emails/Bitcoin%20P2P%20e-cash%20paper.md)
 
+1. [Bitcoin P2P e-cash paper](emails/Bitcoin%20P2P%20e-cash%20paper.md)
 2. TODO: 补充其他邮件并写入emails目录
 
+<br />
 
+> <br />
 
+## 📚 文档目录
+> 以下文件自动加载，新增 .md 文件会自动显示
+
+{% assign docs = site.static_files | where: "extname", ".md" | reject: "name", "README.md" %}
+{% for doc in docs %}
+- [{{ doc.name | remove: ".md" }}]({{ doc.path }})
+{% endfor %}
