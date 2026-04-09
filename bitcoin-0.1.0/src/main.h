@@ -9,8 +9,7 @@ class CCoinBase;
 class CTxIn;
 class CTxOut;
 class CTransaction;
-class CBlock
-class CBlockIndex;
+class CBlock class CBlockIndex;
 class CWalletTx;
 class CKeyItem;
 
@@ -159,7 +158,8 @@ public:
 // An input of a transaction.  It contains the location of the previous
 // transaction's output that it claims and a signature that matches the
 // output's public key.
-//
+// 一笔交易的输入信息。
+// 它包含了该交易所声称使用的前一笔交易输出的地址，以及与该输出公钥相匹配的签名。//
 class CTxIn {
 public:
   COutPoint prevout;
@@ -220,7 +220,8 @@ public:
 //
 // An output of a transaction.  It contains the public key that the next input
 // must be able to sign with to claim it.
-//
+// 一笔交易的输出项。
+// 它包含一个公钥，下一个输入项必须能够用该公钥进行签名，才能获得该输出项
 class CTxOut {
 public:
   int64 nValue;
@@ -273,19 +274,31 @@ public:
 //
 // The basic transaction that is broadcasted on the network and contained in
 // blocks.  A transaction can contain multiple inputs and outputs.
-//
+// 网络中广播的、包含在区块中的基本交易。一笔交易可以包含多个输入和输出。
 class CTransaction {
 public:
-  int nVersion;
-  vector<CTxIn> vin;
-  vector<CTxOut> vout;
-  int nLockTime;
+  int nVersion;            // 交易版本号，用于协议升级
+  vector<CTxIn> vin;       // 交易输入列表
+  vector<CTxOut> vout;     // 交易输出列表
+  int nLockTime;           // 锁定时间，交易生效的区块高度或时间戳
 
+  /**
+   * 构造函数
+   * 初始化交易对象，调用SetNull()设置默认值
+   */
   CTransaction() { SetNull(); }
 
+  /**
+   * 序列化方法
+   * 用于网络传输和磁盘存储时的序列化/反序列化
+   */
   IMPLEMENT_SERIALIZE(READWRITE(this->nVersion); nVersion = this->nVersion;
                       READWRITE(vin); READWRITE(vout); READWRITE(nLockTime);)
 
+  /**
+   * 设置交易为默认状态
+   * 将版本号设为1，清空输入输出列表，锁定时间设为0
+   */
   void SetNull() {
     nVersion = 1;
     vin.clear();
@@ -293,10 +306,25 @@ public:
     nLockTime = 0;
   }
 
+  /**
+   * 检查交易是否为空
+   * @return 如果输入和输出列表都为空，返回true，否则返回false
+   */
   bool IsNull() const { return (vin.empty() && vout.empty()); }
 
+  /**
+   * 获取交易的哈希值
+   * 通过序列化交易并计算哈希得到唯一标识符
+   * @return 交易的256位哈希值
+   */
   uint256 GetHash() const { return SerializeHash(*this); }
 
+  /**
+   * 检查交易是否为最终状态
+   * 当锁定时间为0或小于当前最佳区块高度时，交易为最终状态
+   * 否则需要检查所有输入是否为最终状态
+   * @return 如果交易为最终状态，返回true，否则返回false
+   */
   bool IsFinal() const {
     if (nLockTime == 0 || nLockTime < nBestHeight)
       return true;
@@ -306,6 +334,12 @@ public:
     return true;
   }
 
+  /**
+   * 检查当前交易是否比另一个交易更新
+   * 基于交易输入的nSequence字段进行比较
+   * @param old 要比较的旧交易
+   * @return 如果当前交易更新，返回true，否则返回false
+   */
   bool IsNewerThan(const CTransaction &old) const {
     if (vin.size() != old.vin.size())
       return false;
@@ -330,16 +364,30 @@ public:
     return fNewer;
   }
 
+  /**
+   * 检查交易是否为币基交易
+   * 币基交易是区块中的第一个交易，用于创建新的比特币
+   * @return 如果是币基交易，返回true，否则返回false
+   */
   bool IsCoinBase() const {
     return (vin.size() == 1 && vin[0].prevout.IsNull());
   }
 
+  /**
+   * 检查交易的基本有效性
+   * 不依赖于上下文的基本检查，包括：
+   * 1. 输入和输出列表不能为空
+   * 2. 输出金额不能为负值
+   * 3. 币基交易的脚本大小必须在2-100字节之间
+   * 4. 非币基交易的输入不能引用空的输出点
+   * @return 如果交易有效，返回true，否则返回false
+   */
   bool CheckTransaction() const {
-    // Basic checks that don't depend on any context
+    // 基本检查，不依赖于任何上下文
     if (vin.empty() || vout.empty())
       return error("CTransaction::CheckTransaction() : vin or vout empty");
 
-    // Check for negative values
+    // 检查是否有负值
     foreach (const CTxOut &txout, vout)
       if (txout.nValue < 0)
         return error(
@@ -357,6 +405,11 @@ public:
     return true;
   }
 
+  /**
+   * 检查交易是否与当前钱包相关
+   * 即检查交易的输出是否属于当前钱包
+   * @return 如果交易与当前钱包相关，返回true，否则返回false
+   */
   bool IsMine() const {
     foreach (const CTxOut &txout, vout)
       if (txout.IsMine())
@@ -364,6 +417,11 @@ public:
     return false;
   }
 
+  /**
+   * 获取交易的总借记金额
+   * 即交易所有输入的金额总和
+   * @return 交易的总借记金额，单位为聪
+   */
   int64 GetDebit() const {
     int64 nDebit = 0;
     foreach (const CTxIn &txin, vin)
@@ -371,6 +429,11 @@ public:
     return nDebit;
   }
 
+  /**
+   * 获取交易的总贷记金额
+   * 即交易所有属于当前钱包的输出金额总和
+   * @return 交易的总贷记金额，单位为聪
+   */
   int64 GetCredit() const {
     int64 nCredit = 0;
     foreach (const CTxOut &txout, vout)
@@ -378,6 +441,12 @@ public:
     return nCredit;
   }
 
+  /**
+   * 获取交易的总输出金额
+   * 即交易所有输出的金额总和
+   * @return 交易的总输出金额，单位为聪
+   * @throws runtime_error 如果任何输出金额为负值
+   */
   int64 GetValueOut() const {
     int64 nValueOut = 0;
     foreach (const CTxOut &txout, vout) {
@@ -388,6 +457,12 @@ public:
     return nValueOut;
   }
 
+  /**
+   * 计算交易的最低手续费
+   * 根据交易大小计算，每1000字节收取1聪的手续费
+   * @param fDiscount 是否应用折扣（小于10000字节的交易免费）
+   * @return 交易的最低手续费，单位为聪
+   */
   int64 GetMinFee(bool fDiscount = false) const {
     unsigned int nBytes = ::GetSerializeSize(*this, SER_NETWORK);
     if (fDiscount && nBytes < 10000)
@@ -395,17 +470,23 @@ public:
     return (1 + (int64)nBytes / 1000) * CENT;
   }
 
+  /**
+   * 从磁盘读取交易
+   * @param pos 交易在磁盘上的位置
+   * @param pfileRet 可选的文件指针返回值
+   * @return 如果成功读取，返回true，否则返回false
+   */
   bool ReadFromDisk(CDiskTxPos pos, FILE **pfileRet = NULL) {
     CAutoFile filein = OpenBlockFile(pos.nFile, 0, pfileRet ? "rb+" : "rb");
     if (!filein)
       return error("CTransaction::ReadFromDisk() : OpenBlockFile failed");
 
-    // Read transaction
+    // 读取交易
     if (fseek(filein, pos.nTxPos, SEEK_SET) != 0)
       return error("CTransaction::ReadFromDisk() : fseek failed");
     filein >> *this;
 
-    // Return file pointer
+    // 返回文件指针
     if (pfileRet) {
       if (fseek(filein, pos.nTxPos, SEEK_SET) != 0)
         return error("CTransaction::ReadFromDisk() : second fseek failed");
@@ -414,15 +495,34 @@ public:
     return true;
   }
 
+  /**
+   * 等于运算符重载
+   * 比较两个交易是否相等
+   * @param a 第一个交易
+   * @param b 第二个交易
+   * @return 如果两个交易相等，返回true，否则返回false
+   */
   friend bool operator==(const CTransaction &a, const CTransaction &b) {
     return (a.nVersion == b.nVersion && a.vin == b.vin && a.vout == b.vout &&
             a.nLockTime == b.nLockTime);
   }
 
+  /**
+   * 不等于运算符重载
+   * 比较两个交易是否不相等
+   * @param a 第一个交易
+   * @param b 第二个交易
+   * @return 如果两个交易不相等，返回true，否则返回false
+   */
   friend bool operator!=(const CTransaction &a, const CTransaction &b) {
     return !(a == b);
   }
 
+  /**
+   * 将交易转换为字符串表示
+   * 包含交易哈希、版本、输入输出数量、锁定时间等信息
+   * @return 交易的字符串表示
+   */
   string ToString() const {
     string str;
     str += strprintf("CTransaction(hash=%s, ver=%d, vin.size=%d, vout.size=%d, "
@@ -436,17 +536,62 @@ public:
     return str;
   }
 
+  /**
+   * 打印交易信息
+   * 调用ToString()方法并打印结果
+   */
   void print() const { printf("%s", ToString().c_str()); }
 
+  /**
+   * 断开交易输入的连接
+   * 用于区块回滚时，将交易的输入标记为未花费
+   * @param txdb 交易数据库
+   * @return 如果成功断开连接，返回true，否则返回false
+   */
   bool DisconnectInputs(CTxDB &txdb);
+
+  /**
+   * 连接交易输入
+   * 验证交易输入的有效性，并将输入标记为已花费
+   * @param txdb 交易数据库
+   * @param mapTestPool 测试池映射
+   * @param posThisTx 当前交易在磁盘上的位置
+   * @param nHeight 区块高度
+   * @param nFees 交易手续费
+   * @param fBlock 是否在区块中
+   * @param fMiner 是否为矿工
+   * @param nMinFee 最低手续费
+   * @return 如果成功连接，返回true，否则返回false
+   */
   bool ConnectInputs(CTxDB &txdb, map<uint256, CTxIndex> &mapTestPool,
                      CDiskTxPos posThisTx, int nHeight, int64 &nFees,
                      bool fBlock, bool fMiner, int64 nMinFee = 0);
+
+  /**
+   * 客户端连接交易输入
+   * 用于客户端验证交易
+   * @return 如果成功连接，返回true，否则返回false
+   */
   bool ClientConnectInputs();
 
+  /**
+   * 接受交易
+   * 验证交易并将其添加到内存池
+   * @param txdb 交易数据库
+   * @param fCheckInputs 是否检查输入
+   * @param pfMissingInputs 可选的缺失输入标记
+   * @return 如果成功接受，返回true，否则返回false
+   */
   bool AcceptTransaction(CTxDB &txdb, bool fCheckInputs = true,
                          bool *pfMissingInputs = NULL);
 
+  /**
+   * 接受交易（重载）
+   * 创建只读交易数据库并调用重载版本
+   * @param fCheckInputs 是否检查输入
+   * @param pfMissingInputs 可选的缺失输入标记
+   * @return 如果成功接受，返回true，否则返回false
+   */
   bool AcceptTransaction(bool fCheckInputs = true,
                          bool *pfMissingInputs = NULL) {
     CTxDB txdb("r");
@@ -454,52 +599,117 @@ public:
   }
 
 protected:
+  /**
+   * 添加交易到内存池
+   * @return 如果成功添加，返回true，否则返回false
+   */
   bool AddToMemoryPool();
 
 public:
+  /**
+   * 从内存池移除交易
+   * @return 如果成功移除，返回true，否则返回false
+   */
   bool RemoveFromMemoryPool();
 };
 
 //
 // A transaction with a merkle branch linking it to the block chain
-//
+// 一种与区块链存在关联的、通过默克尔分支进行连接的交易操作
 class CMerkleTx : public CTransaction {
 public:
-  uint256 hashBlock;
-  vector<uint256> vMerkleBranch;
-  int nIndex;
+  uint256 hashBlock;           // 交易所在区块的哈希值
+  vector<uint256> vMerkleBranch; // 默克尔分支，用于验证交易存在性
+  int nIndex;                  // 交易在区块中的索引位置
 
   // memory only
-  mutable bool fMerkleVerified;
+  mutable bool fMerkleVerified; // 默克尔验证状态（仅内存中使用）
 
+  /**
+   * 构造函数
+   * 初始化默克尔交易对象，调用Init()设置默认值
+   */
   CMerkleTx() { Init(); }
 
+  /**
+   * 构造函数（从CTransaction构造）
+   * @param txIn 基础交易对象
+   */
   CMerkleTx(const CTransaction &txIn) : CTransaction(txIn) { Init(); }
 
+  /**
+   * 初始化默克尔交易的默认值
+   * 将区块哈希设为0，索引设为-1，验证状态设为false
+   */
   void Init() {
     hashBlock = 0;
     nIndex = -1;
     fMerkleVerified = false;
   }
 
+  /**
+   * 获取交易的贷记金额
+   * 对于币基交易，需要等待足够的确认数才能计入余额
+   * @return 交易的贷记金额，单位为聪
+   */
   int64 GetCredit() const {
-    // Must wait until coinbase is safely deep enough in the chain before
-    // valuing it
+    // 必须等待币基交易在链中足够深后才能计入价值
     if (IsCoinBase() && GetBlocksToMaturity() > 0)
       return 0;
     return CTransaction::GetCredit();
   }
 
+  /**
+   * 序列化方法
+   * 用于网络传输和磁盘存储时的序列化/反序列化
+   */
   IMPLEMENT_SERIALIZE(nSerSize += SerReadWrite(s, *(CTransaction *)this, nType,
                                                nVersion, ser_action);
                       nVersion = this->nVersion; READWRITE(hashBlock);
                       READWRITE(vMerkleBranch); READWRITE(nIndex);)
 
+  /**
+   * 设置默克尔分支
+   * 为交易设置默克尔分支信息，用于验证交易存在性
+   * @param pblock 可选的区块指针
+   * @return 成功返回0，失败返回错误码
+   */
   int SetMerkleBranch(const CBlock *pblock = NULL);
+
+  /**
+   * 获取交易在主链中的深度
+   * 即交易所在区块到最长链 tip 的距离
+   * @return 交易在主链中的深度
+   */
   int GetDepthInMainChain() const;
+
+  /**
+   * 检查交易是否在主链中
+   * @return 如果交易在主链中，返回true，否则返回false
+   */
   bool IsInMainChain() const { return GetDepthInMainChain() > 0; }
+
+  /**
+   * 获取币基交易到成熟所需的区块数
+   * 币基交易需要100个确认才能成熟
+   * @return 到成熟所需的区块数
+   */
   int GetBlocksToMaturity() const;
+
+  /**
+   * 接受默克尔交易
+   * 验证交易并将其添加到钱包
+   * @param txdb 交易数据库
+   * @param fCheckInputs 是否检查输入
+   * @return 如果成功接受，返回true，否则返回false
+   */
   bool AcceptTransaction(CTxDB &txdb, bool fCheckInputs = true);
+
+  /**
+   * 接受默克尔交易（重载）
+   * 创建只读交易数据库并调用重载版本
+   * @return 如果成功接受，返回true，否则返回false
+   */
   bool AcceptTransaction() {
     CTxDB txdb("r");
     return AcceptTransaction(txdb);
@@ -510,27 +720,44 @@ public:
 // A transaction with a bunch of additional info that only the owner cares
 // about.  It includes any unrecorded transactions needed to link it back
 // to the block chain.
-//
+// 一种包含大量附加信息的交易，这些信息只有交易的拥有者才关心。
+// 它包含了任何用于将该交易链接回区块链所需的未记录交易信息。
 class CWalletTx : public CMerkleTx {
 public:
-  vector<CMerkleTx> vtxPrev;
-  map<string, string> mapValue;
-  vector<pair<string, string>> vOrderForm;
-  unsigned int fTimeReceivedIsTxTime;
-  unsigned int nTimeReceived; // time received by this node
-  char fFromMe;
-  char fSpent;
+  vector<CMerkleTx> vtxPrev;           // 前序交易列表，用于构建交易链
+  map<string, string> mapValue;         // 键值对数据，存储交易相关信息
+  vector<pair<string, string>> vOrderForm; // 订单表单，用于交易附加信息
+  unsigned int fTimeReceivedIsTxTime;   // 接收时间是否为交易时间
+  unsigned int nTimeReceived;           // 节点接收交易的时间
+  char fFromMe;                         // 是否由当前钱包发送
+  char fSpent;                          // 交易是否已花费
   //// probably need to sign the order info so know it came from payer
+  // 可能需要签署订单信息以确认其确实来自付款方
+  //  memory only 内存中仅使用
+  mutable unsigned int nTimeDisplayed;  // 交易显示时间（仅内存中使用）
 
-  // memory only
-  mutable unsigned int nTimeDisplayed;
-
+  /**
+   * 构造函数
+   * 初始化钱包交易对象，调用Init()设置默认值
+   */
   CWalletTx() { Init(); }
 
+  /**
+   * 构造函数（从CMerkleTx构造）
+   * @param txIn 默克尔交易对象
+   */
   CWalletTx(const CMerkleTx &txIn) : CMerkleTx(txIn) { Init(); }
 
+  /**
+   * 构造函数（从CTransaction构造）
+   * @param txIn 基础交易对象
+   */
   CWalletTx(const CTransaction &txIn) : CMerkleTx(txIn) { Init(); }
 
+  /**
+   * 初始化钱包交易的默认值
+   * 设置时间和状态标志为默认值
+   */
   void Init() {
     fTimeReceivedIsTxTime = false;
     nTimeReceived = 0;
@@ -539,6 +766,10 @@ public:
     nTimeDisplayed = 0;
   }
 
+  /**
+   * 序列化方法
+   * 用于网络传输和磁盘存储时的序列化/反序列化
+   */
   IMPLEMENT_SERIALIZE(nSerSize += SerReadWrite(s, *(CMerkleTx *)this, nType,
                                                nVersion, ser_action);
                       nVersion = this->nVersion; READWRITE(vtxPrev);
@@ -547,19 +778,55 @@ public:
                       READWRITE(nTimeReceived); READWRITE(fFromMe);
                       READWRITE(fSpent);)
 
+  /**
+   * 将交易写入磁盘
+   * @return 如果成功写入，返回true，否则返回false
+   */
   bool WriteToDisk() { return CWalletDB().WriteTx(GetHash(), *this); }
 
+  /**
+   * 获取交易时间
+   * @return 交易时间戳
+   */
   int64 GetTxTime() const;
 
+  /**
+   * 添加支持交易
+   * 添加交易所需的前序交易，用于构建完整的交易链
+   * @param txdb 交易数据库
+   */
   void AddSupportingTransactions(CTxDB &txdb);
 
+  /**
+   * 接受钱包交易
+   * 验证交易并将其添加到钱包
+   * @param txdb 交易数据库
+   * @param fCheckInputs 是否检查输入
+   * @return 如果成功接受，返回true，否则返回false
+   */
   bool AcceptWalletTransaction(CTxDB &txdb, bool fCheckInputs = true);
+
+  /**
+   * 接受钱包交易（重载）
+   * 创建只读交易数据库并调用重载版本
+   * @return 如果成功接受，返回true，否则返回false
+   */
   bool AcceptWalletTransaction() {
     CTxDB txdb("r");
     return AcceptWalletTransaction(txdb);
   }
 
+  /**
+   * 中继钱包交易
+   * 将交易广播到网络
+   * @param txdb 交易数据库
+   */
   void RelayWalletTransaction(CTxDB &txdb);
+
+  /**
+   * 中继钱包交易（重载）
+   * 创建只读交易数据库并调用重载版本
+   */
   void RelayWalletTransaction() {
     CTxDB txdb("r");
     RelayWalletTransaction(txdb);
@@ -571,6 +838,8 @@ public:
 // locations of transactions that spend its outputs.  vSpent is really only
 // used as a flag, but having the location is very helpful for debugging.
 //
+// 一个 txdb 记录包含了交易的磁盘位置以及使用其输出的其他交易的存储位置。
+// vSpent 实际上只是用作一个标志，但拥有这些位置对于调试非常有帮助。//
 class CTxIndex {
 public:
   CDiskTxPos pos;
@@ -618,6 +887,13 @@ public:
 // Blocks are appended to blk0001.dat files on disk.  Their location on disk
 // is indexed by CBlockIndex objects in memory.
 //
+//
+// 节点将新的交易汇集到一个区块中，将它们进行哈希运算生成一个哈希树，
+// 并遍历 nonce 值以使区块的哈希值满足工作量证明的要求。当它们解决工作量证明问题时，
+// 他们会将该区块广播给所有人，然后该区块会被添加到区块链中。
+// 区块中的第一个交易是一个特殊的交易，它创建了一个由区块的创建者所拥有的新货币。//
+// 块会被附加到磁盘上的 blk0001.dat 文件中。这些块在磁盘上的位置是由内存中的 CBlockIndex 对象进行索引管理的。//
+
 class CBlock {
 public:
   // header
@@ -785,6 +1061,12 @@ public:
 // to it, but pnext will only point forward to the longest branch, or will
 // be null if the block is not part of the longest chain.
 //
+//
+// 区块链是一种树状结构，起始点是创世区块，位于根部。
+// 每个区块都有可能有多个成为下一区块的候选者。
+// pprev 和 pnext 构成了贯穿主链/最长链的路径。
+// 一个区块索引可能有多个指向它的 pprev，但 pnext 只会指向最长分支，或者如果该区块不属于最长链，则 pnext 会为空。//
+
 class CBlockIndex {
 public:
   const uint256 *phashBlock;
@@ -887,6 +1169,7 @@ public:
 
 //
 // Used to marshal pointers into hashes for db storage.
+// 用于将指针转换为哈希表以便进行数据库存储。
 //
 class CDiskBlockIndex : public CBlockIndex {
 public:
@@ -942,6 +1225,9 @@ public:
 // Describes a place in the block chain to another node such that if the
 // other node doesn't have the same branch, it can find a recent common trunk.
 // The further back it is, the further before the fork it may be.
+// 该描述用于将区块链中的某个位置传递给另一节点，
+// 以便如果该节点没有相同的分支，它能够找到最近的共同主干。
+// 时间越久远，就越可能是在分叉事件发生之前较早的阶段。
 //
 class CBlockLocator {
 protected:

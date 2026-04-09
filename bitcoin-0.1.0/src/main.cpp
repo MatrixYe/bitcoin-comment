@@ -321,19 +321,40 @@ void CWalletTx::AddSupportingTransactions(CTxDB &txdb) {
   reverse(vtxPrev.begin(), vtxPrev.end());
 }
 
+/**
+ * 接受交易
+ * 验证交易的有效性，并将其添加到内存池
+ *
+ * @param txdb 交易数据库，用于查询已有交易和验证输入
+ * @param fCheckInputs 是否检查输入，如果为false则跳过输入验证
+ * @param pfMissingInputs 可选的输出参数，用于标记是否有缺失的输入
+ * @return 如果交易被成功接受，返回true；否则返回false
+ *
+ * 主要验证步骤：
+ * 1. 检查是否为币基交易（币基交易不能作为独立交易被接受）
+ * 2. 执行基本交易检查（CheckTransaction）
+ * 3. 检查交易是否已存在于内存池或数据库中
+ * 4. 检查与内存中交易的冲突（支持用新版本替换旧版本）
+ * 5. 验证交易输入（ConnectInputs）
+ * 6. 将交易添加到内存池
+ */
 bool CTransaction::AcceptTransaction(CTxDB &txdb, bool fCheckInputs,
                                      bool *pfMissingInputs) {
+  // 初始化缺失输入标记为false
   if (pfMissingInputs)
     *pfMissingInputs = false;
 
   // Coinbase is only valid in a block, not as a loose transaction
+  // 币基交易只在区块中有效，不能作为独立交易被接受
   if (IsCoinBase())
     return error("AcceptTransaction() : coinbase as individual tx");
 
+  // 执行基本交易检查
   if (!CheckTransaction())
     return error("AcceptTransaction() : CheckTransaction failed");
 
   // Do we already have it?
+  // 检查交易是否已存在于内存池或数据库中
   uint256 hash = GetHash();
   CRITICAL_BLOCK(cs_mapTransactions)
   if (mapTransactions.count(hash))
@@ -343,16 +364,20 @@ bool CTransaction::AcceptTransaction(CTxDB &txdb, bool fCheckInputs,
       return false;
 
   // Check for conflicts with in-memory transactions
+  // 检查与内存中交易的冲突
   CTransaction *ptxOld = NULL;
   for (int i = 0; i < vin.size(); i++) {
     COutPoint outpoint = vin[i].prevout;
     if (mapNextTx.count(outpoint)) {
       // Allow replacing with a newer version of the same transaction
+      // 允许用新版本替换同一交易的旧版本，只有第一个输入可以触发替换
       if (i != 0)
         return false;
       ptxOld = mapNextTx[outpoint].ptx;
+      // 检查当前交易是否比旧版本更新
       if (!IsNewerThan(*ptxOld))
         return false;
+      // 验证所有输入都指向同一旧交易
       for (int i = 0; i < vin.size(); i++) {
         COutPoint outpoint = vin[i].prevout;
         if (!mapNextTx.count(outpoint) || mapNextTx[outpoint].ptx != ptxOld)
@@ -363,6 +388,7 @@ bool CTransaction::AcceptTransaction(CTxDB &txdb, bool fCheckInputs,
   }
 
   // Check against previous transactions
+  // 验证交易输入
   map<uint256, CTxIndex> mapUnused;
   int64 nFees = 0;
   if (fCheckInputs && !ConnectInputs(txdb, mapUnused, CDiskTxPos(1, 1, 1), 0,
@@ -374,6 +400,7 @@ bool CTransaction::AcceptTransaction(CTxDB &txdb, bool fCheckInputs,
   }
 
   // Store transaction in memory
+  // 将交易存储到内存池
   CRITICAL_BLOCK(cs_mapTransactions) {
     if (ptxOld) {
       printf("mapTransaction.erase(%s) replacing with new version\n",
@@ -385,6 +412,7 @@ bool CTransaction::AcceptTransaction(CTxDB &txdb, bool fCheckInputs,
 
   ///// are we sure this is ok when loading transactions or restoring block txes
   // If updated, erase old tx from wallet
+  // 如果更新了交易，从钱包中删除旧交易
   if (ptxOld)
     EraseFromWallet(ptxOld->GetHash());
 
@@ -628,27 +656,56 @@ bool CTransaction::DisconnectInputs(CTxDB &txdb) {
   return true;
 }
 
+/**
+ * 连接交易输入
+ * 验证交易输入的有效性，检查签名、防止双重花费，并更新花费状态
+ *
+ * @param txdb 交易数据库，用于读写交易索引
+ * @param mapTestPool 测试池映射，矿工挖矿时用于暂存未确认的交易索引变更
+ * @param posThisTx 当前交易在磁盘上的位置（区块模式下）或占位符（矿工模式下）
+ * @param nHeight 当前区块高度，用于币基交易成熟度检查
+ * @param nFees 交易手续费的累加引用，函数会将当前交易的手续费加到该值上
+ * @param fBlock 是否在区块连接模式下运行（区块被添加到链上时为true）
+ * @param fMiner 是否在矿工挖矿模式下运行（矿工构建区块时为true）
+ * @param nMinFee 最低手续费要求，低于此值的交易将被拒绝
+ * @return 如果所有输入验证通过，返回true；否则返回false
+ *
+ * 主要验证步骤：
+ * 1. 获取前序交易的索引和交易数据
+ * 2. 检查输出索引是否越界
+ * 3. 检查币基交易是否已成熟（100个确认）
+ * 4. 验证交易签名（核心安全检查）
+ * 5. 检查双重花费（输出是否已被使用）
+ * 6. 标记输出为已花费
+ * 7. 计算并验证交易手续费
+ */
 bool CTransaction::ConnectInputs(CTxDB &txdb,
                                  map<uint256, CTxIndex> &mapTestPool,
                                  CDiskTxPos posThisTx, int nHeight,
                                  int64 &nFees, bool fBlock, bool fMiner,
                                  int64 nMinFee) {
   // Take over previous transactions' spent pointers
+  // 接管前序交易的花费指针，币基交易没有前序输入，跳过此步骤
   if (!IsCoinBase()) {
     int64 nValueIn = 0;
     for (int i = 0; i < vin.size(); i++) {
       COutPoint prevout = vin[i].prevout;
 
       // Read txindex
+      // 读取前序交易的索引信息
       CTxIndex txindex;
       bool fFound = true;
       if (fMiner && mapTestPool.count(prevout.hash)) {
         // Get txindex from current proposed changes
+        // 矿工模式下，优先从测试池中获取（测试池包含当前正在构建的区块中的交易索引）
         txindex = mapTestPool[prevout.hash];
       } else {
         // Read txindex from txdb
+        // 非矿工模式或测试池中没有，从交易数据库中读取
         fFound = txdb.ReadTxIndex(prevout.hash, txindex);
       }
+      // 如果未找到索引且在区块或矿工模式下，返回错误
+      // 矿工模式下静默返回false，区块模式下输出错误日志
       if (!fFound && (fBlock || fMiner))
         return fMiner ? false
                       : error("ConnectInputs() : %s prev tx %s index entry not "
@@ -657,9 +714,12 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
                               prevout.hash.ToString().substr(0, 6).c_str());
 
       // Read txPrev
+      // 读取前序交易的完整数据
       CTransaction txPrev;
       if (!fFound || txindex.pos == CDiskTxPos(1, 1, 1)) {
         // Get prev tx from single transactions in memory
+        // 未找到索引或索引位置为占位符(1,1,1)时，从内存池中获取前序交易
+        // 占位符(1,1,1)表示交易尚未写入磁盘，仍在内存池中
         CRITICAL_BLOCK(cs_mapTransactions) {
           if (!mapTransactions.count(prevout.hash))
             return error(
@@ -668,22 +728,29 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
                 prevout.hash.ToString().substr(0, 6).c_str());
           txPrev = mapTransactions[prevout.hash];
         }
+        // 如果索引未找到，初始化vSpent数组大小
         if (!fFound)
           txindex.vSpent.resize(txPrev.vout.size());
       } else {
         // Get prev tx from disk
+        // 索引存在且位置有效时，从磁盘读取前序交易
         if (!txPrev.ReadFromDisk(txindex.pos))
           return error("ConnectInputs() : %s ReadFromDisk prev tx %s failed",
                        GetHash().ToString().substr(0, 6).c_str(),
                        prevout.hash.ToString().substr(0, 6).c_str());
       }
 
+      // 检查输出索引是否越界
+      // prevout.n 不能超过前序交易的输出数量和花费记录数量
       if (prevout.n >= txPrev.vout.size() || prevout.n >= txindex.vSpent.size())
         return error("ConnectInputs() : %s prevout.n out of range %d %d %d",
                      GetHash().ToString().substr(0, 6).c_str(), prevout.n,
                      txPrev.vout.size(), txindex.vSpent.size());
 
       // If prev is coinbase, check that it's matured
+      // 如果前序交易是币基交易，检查其是否已成熟
+      // 币基交易需要COINBASE_MATURITY（100）个确认才能被花费
+      // 遍历最近的区块，检查币基交易所在区块是否在成熟度范围内
       if (txPrev.IsCoinBase())
         for (CBlockIndex *pindex = pindexBest;
              pindex && nBestHeight - pindex->nHeight < COINBASE_MATURITY - 1;
@@ -695,11 +762,16 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
                 nBestHeight - pindex->nHeight);
 
       // Verify signature
+      // 验证签名：核心安全检查
+      // 使用前序交易的输出脚本(scriptPubKey)验证当前交易的输入脚本(scriptSig)
+      // 确保交易确实由UTXO的拥有者签名授权
       if (!VerifySignature(txPrev, *this, i))
         return error("ConnectInputs() : %s VerifySignature failed",
                      GetHash().ToString().substr(0, 6).c_str());
 
       // Check for conflicts
+      // 检查双重花费：如果该输出已被其他交易花费，则拒绝
+      // vSpent[prevout.n]非空表示该输出已被引用
       if (!txindex.vSpent[prevout.n].IsNull())
         return fMiner ? false
                       : error("ConnectInputs() : %s prev tx already used at %s",
@@ -707,33 +779,45 @@ bool CTransaction::ConnectInputs(CTxDB &txdb,
                               txindex.vSpent[prevout.n].ToString().c_str());
 
       // Mark outpoints as spent
+      // 标记输出为已花费，记录花费该输出的交易位置
       txindex.vSpent[prevout.n] = posThisTx;
 
       // Write back
+      // 将更新后的交易索引写回
       if (fBlock)
+        // 区块模式：直接更新数据库中的交易索引
         txdb.UpdateTxIndex(prevout.hash, txindex);
       else if (fMiner)
+        // 矿工模式：更新测试池中的交易索引（尚未写入磁盘）
         mapTestPool[prevout.hash] = txindex;
 
+      // 累加输入金额
       nValueIn += txPrev.vout[prevout.n].nValue;
     }
 
     // Tally transaction fees
+    // 计算交易手续费 = 输入总额 - 输出总额
     int64 nTxFee = nValueIn - GetValueOut();
+    // 手续费不能为负（输出不能超过输入）
     if (nTxFee < 0)
       return error("ConnectInputs() : %s nTxFee < 0",
                    GetHash().ToString().substr(0, 6).c_str());
+    // 手续费不能低于最低要求
     if (nTxFee < nMinFee)
       return false;
+    // 将手续费累加到总手续费中
     nFees += nTxFee;
   }
 
+  // 根据运行模式将当前交易添加到索引
   if (fBlock) {
     // Add transaction to disk index
+    // 区块模式：将交易添加到磁盘索引，记录其位置和高度
     if (!txdb.AddTxIndex(*this, posThisTx, nHeight))
       return error("ConnectInputs() : AddTxPos failed");
   } else if (fMiner) {
     // Add transaction to test pool
+    // 矿工模式：将交易添加到测试池，使用占位符(1,1,1)表示尚未写入磁盘
     mapTestPool[GetHash()] = CTxIndex(CDiskTxPos(1, 1, 1), vout.size());
   }
 
@@ -762,7 +846,7 @@ bool CTransaction::ClientConnectInputs() {
         return error("ConnectInputs() : VerifySignature failed");
 
       ///// this is redundant with the mapNextTx stuff, not sure which I want to
-      ///get rid of
+      /// get rid of
       ///// this has to go away now that posNext is gone
       // // Check for conflicts
       // if (!txPrev.vout[prevout.n].posNext.IsNull())
@@ -1520,7 +1604,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
   // ============================================================================
   if (nDropMessagesTest > 0 && GetRand(nDropMessagesTest) == 0) {
     printf("dropmessages DROPPING RECV MESSAGE\n");
-    return true;  // 返回true表示消息已处理（被丢弃）
+    return true; // 返回true表示消息已处理（被丢弃）
   }
 
   // ============================================================================
@@ -1531,11 +1615,11 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
     // 版本消息只能接收一次，防止重复处理
     // 如果pfrom->nVersion != 0，说明已经处理过版本消息
     if (pfrom->nVersion != 0)
-      return false;  // 返回false表示协议错误
+      return false; // 返回false表示协议错误
 
     // 从消息流中读取版本信息
-    int64 nTime;      // 对方节点的时间戳
-    CAddress addrMe;   // 对方节点认为的我的地址
+    int64 nTime;     // 对方节点的时间戳
+    CAddress addrMe; // 对方节点认为的我的地址
 
     // 解析版本消息：版本号、服务标志、时间戳、地址
     vRecv >> pfrom->nVersion >> pfrom->nServices >> nTime >> addrMe;
@@ -1557,8 +1641,8 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
     // 如果对方是轻量级客户端，优化数据传输
     // 只发送区块头，不发送完整的区块内容
     if (pfrom->fClient) {
-      pfrom->vSend.nType |= SER_BLOCKHEADERONLY;   // 发送流只包含区块头
-      pfrom->vRecv.nType |= SER_BLOCKHEADERONLY;   // 接收流只包含区块头
+      pfrom->vSend.nType |= SER_BLOCKHEADERONLY; // 发送流只包含区块头
+      pfrom->vRecv.nType |= SER_BLOCKHEADERONLY; // 接收流只包含区块头
     }
 
     // 记录时间数据用于网络时间同步
@@ -1569,7 +1653,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
     // 静态变量fAskedForBlocks确保只向一个节点请求，避免重复请求
     static bool fAskedForBlocks;
     if (!fAskedForBlocks && !pfrom->fClient) {
-      fAskedForBlocks = true;  // 标记已请求过区块
+      fAskedForBlocks = true; // 标记已请求过区块
 
       // 发送getblocks消息，请求从当前最佳区块开始的区块
       // CBlockLocator(pindexBest)表示从当前最佳区块开始
@@ -1607,7 +1691,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
     foreach (const CAddress &addr, vAddr) {
       // 检查是否正在关闭程序
       if (fShutdown)
-        return true;  // 正常退出，返回true
+        return true; // 正常退出，返回true
 
       // 尝试将新地址添加到地址管理器
       // AddAddress会检查地址是否已存在，并更新地址的时间戳
@@ -1619,11 +1703,11 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
         pfrom->setAddrKnown.insert(addr);
 
         // 遍历所有连接的节点，将新地址加入它们的发送队列
-        CRITICAL_BLOCK(cs_vNodes)  // 临界区保护，确保线程安全
-          foreach (CNode *pnode, vNodes)
-            // 只向不知道该地址的节点发送
-            if (!pnode->setAddrKnown.count(addr))
-              pnode->vAddrToSend.push_back(addr);  // 加入发送队列
+        CRITICAL_BLOCK(cs_vNodes) // 临界区保护，确保线程安全
+        foreach (CNode *pnode, vNodes)
+          // 只向不知道该地址的节点发送
+          if (!pnode->setAddrKnown.count(addr))
+            pnode->vAddrToSend.push_back(addr); // 加入发送队列
       }
     }
   }
@@ -1658,7 +1742,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
 
       // 如果本地没有该数据，向对方请求
       if (!fAlreadyHave)
-        pfrom->AskFor(inv);  // 将请求加入优先队列，稍后发送getdata消息
+        pfrom->AskFor(inv); // 将请求加入优先队列，稍后发送getdata消息
       // 特殊处理：如果是区块且在孤儿区块映射中存在
       // 说明该区块的前驱区块还未收到，需要请求前驱区块
       else if (inv.type == MSG_BLOCK && mapOrphanBlocks.count(inv.hash))
@@ -1705,7 +1789,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
       else if (inv.IsKnownType()) {
         // 从中继内存中发送数据流
         // mapRelay是全局的中继消息缓存，保存最近收到的消息
-        CRITICAL_BLOCK(cs_mapRelay) {  // 临界区保护，确保线程安全
+        CRITICAL_BLOCK(cs_mapRelay) { // 临界区保护，确保线程安全
           map<CInv, CDataStream>::iterator mi = mapRelay.find(inv);
           if (mi != mapRelay.end())
             // 直接发送原始消息流，保持原始格式
@@ -1723,7 +1807,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
   // ============================================================================
   else if (strCommand == "getblocks") {
     // 从消息流中读取区块定位符和停止哈希
-    CBlockLocator locator;  // 区块定位符，表示请求者已知的最新区块
+    CBlockLocator locator; // 区块定位符，表示请求者已知的最新区块
     uint256 hashStop;      // 停止哈希，表示请求到此区块为止
     vRecv >> locator >> hashStop;
 
@@ -1746,12 +1830,12 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
       if (pindex->GetBlockHash() == hashStop) {
         printf("  getblocks stopping at %d %s\n", pindex->nHeight,
                pindex->GetBlockHash().ToString().substr(0, 14).c_str());
-        break;  // 到达停止点，停止发送
+        break; // 到达停止点，停止发送
       }
 
       // 绕过setInventoryKnown，防止库存消息丢失导致区块无法同步
       // 使用setInventoryKnown2作为临时集合，确保消息能够到达
-      CRITICAL_BLOCK(pfrom->cs_inventory) {  // 临界区保护，确保线程安全
+      CRITICAL_BLOCK(pfrom->cs_inventory) { // 临界区保护，确保线程安全
         CInv inv(MSG_BLOCK, pindex->GetBlockHash());
         // 如果不在setInventoryKnown2中，说明是新的库存项
         if (pfrom->setInventoryKnown2.insert(inv).second) {
@@ -1782,7 +1866,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
 
     // 创建交易库存项
     CInv inv(MSG_TX, tx.GetHash());
-    pfrom->AddInventoryKnown(inv);  // 标记为已知，避免重复处理
+    pfrom->AddInventoryKnown(inv); // 标记为已知，避免重复处理
 
     // 标记是否缺少输入
     bool fMissingInputs = false;
@@ -1817,7 +1901,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
           // 获取孤儿交易的消息流
           const CDataStream &vMsg = *((*mi).second);
           CTransaction tx;
-          CDataStream(vMsg) >> tx;  // 反序列化交易
+          CDataStream(vMsg) >> tx; // 反序列化交易
 
           // 创建孤儿交易的库存项
           CInv inv(MSG_TX, tx.GetHash());
@@ -1851,7 +1935,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
     else if (fMissingInputs) {
       printf("storing orphan tx %s\n",
              inv.hash.ToString().substr(0, 6).c_str());
-      AddOrphanTx(vMsg);  // 存储孤儿交易，等待其输入交易到达
+      AddOrphanTx(vMsg); // 存储孤儿交易，等待其输入交易到达
     }
   }
 
@@ -1870,7 +1954,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
 
     // 创建评论库存项
     CInv inv(MSG_REVIEW, review.GetHash());
-    pfrom->AddInventoryKnown(inv);  // 标记为已知，避免重复处理
+    pfrom->AddInventoryKnown(inv); // 标记为已知，避免重复处理
 
     // 尝试接受评论
     // AcceptReview会验证评论的有效性，包括签名、内容等
@@ -1903,7 +1987,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
 
     // 创建区块库存项
     CInv inv(MSG_BLOCK, pblock->GetHash());
-    pfrom->AddInventoryKnown(inv);  // 标记为已知，避免重复处理
+    pfrom->AddInventoryKnown(inv); // 标记为已知，避免重复处理
 
     // 处理区块
     // ProcessBlock会验证区块的有效性，并将其加入区块链
@@ -1926,7 +2010,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
     int64 nSince = GetAdjustedTime() - 60 * 60; // 距现在1小时
 
     // 遍历地址数据库，收集符合条件的地址
-    CRITICAL_BLOCK(cs_mapAddresses) {  // 临界区保护，确保线程安全
+    CRITICAL_BLOCK(cs_mapAddresses) { // 临界区保护，确保线程安全
       foreach (const PAIRTYPE(vector<unsigned char>, CAddress) & item,
                mapAddresses) {
         // 检查是否正在关闭程序
@@ -1938,7 +2022,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
 
         // 只发送最近活跃的地址（时间戳大于nSince）
         if (addr.nTime > nSince)
-          pfrom->vAddrToSend.push_back(addr);  // 加入发送队列
+          pfrom->vAddrToSend.push_back(addr); // 加入发送队列
       }
     }
   }
@@ -1950,7 +2034,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
   // ============================================================================
   else if (strCommand == "checkorder") {
     // 从消息流中读取订单信息
-    uint256 hashReply;  // 回复哈希，用于匹配请求和响应
+    uint256 hashReply; // 回复哈希，用于匹配请求和响应
     CWalletTx order;   // 订单交易
     vRecv >> hashReply >> order;
 
@@ -1981,7 +2065,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
   // ============================================================================
   else if (strCommand == "submitorder") {
     // 从消息流中读取订单信息
-    uint256 hashReply;  // 回复哈希，用于匹配请求和响应
+    uint256 hashReply; // 回复哈希，用于匹配请求和响应
     CWalletTx wtxNew;  // 新的订单交易
     vRecv >> hashReply >> wtxNew;
 
@@ -2023,7 +2107,7 @@ bool ProcessMessage(CNode *pfrom, string strCommand, CDataStream &vRecv) {
 
     // 查找对应的请求跟踪器
     CRequestTracker tracker;
-    CRITICAL_BLOCK(pfrom->cs_mapRequests) {  // 临界区保护，确保线程安全
+    CRITICAL_BLOCK(pfrom->cs_mapRequests) { // 临界区保护，确保线程安全
       // 在请求映射中查找对应的哈希
       map<uint256, CRequestTracker>::iterator mi =
           pfrom->mapRequests.find(hashReply);
