@@ -578,39 +578,60 @@ int64 CBlock::GetBlockValue(int64 nFees) const {
   return nSubsidy + nFees;
 }
 
+/**
+ * 计算下一个区块的工作量证明难度值
+ *
+ * 比特币的难度调整算法，每2016个区块（约两周）调整一次
+ * 目的是保持区块生成时间稳定在约10分钟
+ *
+ * @param pindexLast 上一个区块的索引
+ * @return 下一个区块的难度值（压缩格式）
+ */
 unsigned int GetNextWorkRequired(const CBlockIndex *pindexLast) {
+  //- nTargetTimespan ：目标时间跨度，14天（两周）
   const unsigned int nTargetTimespan = 14 * 24 * 60 * 60; // two weeks
+
+  //- nTargetSpacing ：目标时间间隔，10分钟
   const unsigned int nTargetSpacing = 10 * 60;
+
+  //- nInterval ：调整周期，14天/10分钟 = 1440个区块
   const unsigned int nInterval = nTargetTimespan / nTargetSpacing;
 
   // Genesis block
+  // 创世区块特殊处理，返回最大难度
   if (pindexLast == NULL)
     return bnProofOfWorkLimit.GetCompact();
 
   // Only change once per interval
+  // 每nInterval个区块才调整一次难度
   if ((pindexLast->nHeight + 1) % nInterval != 0)
-    return pindexLast->nBits;
+    return pindexLast->nBits; // 没到周期点，返回当前难度值
 
   // Go back by what we want to be 14 days worth of blocks
+  // 回退nInterval-1个区块，获取调整周期的第一个区块
   const CBlockIndex *pindexFirst = pindexLast;
   for (int i = 0; pindexFirst && i < nInterval - 1; i++)
     pindexFirst = pindexFirst->pprev;
   assert(pindexFirst);
 
   // Limit adjustment step
+  // 计算实际时间跨度，最后一个区块时间-第一个区块时间
   unsigned int nActualTimespan = pindexLast->nTime - pindexFirst->nTime;
   printf("  nActualTimespan = %d  before bounds\n", nActualTimespan);
+  // 限制调整幅度，防止难度变化过大，保持网络稳定
   if (nActualTimespan < nTargetTimespan / 4)
-    nActualTimespan = nTargetTimespan / 4;
+    nActualTimespan = nTargetTimespan / 4; // 最小调整为目标时间的1/4
   if (nActualTimespan > nTargetTimespan * 4)
-    nActualTimespan = nTargetTimespan * 4;
+    nActualTimespan = nTargetTimespan * 4; // 最大调整为目标时间的4倍
 
   // Retarget
+  // 重新计算难度值
   CBigNum bnNew;
-  bnNew.SetCompact(pindexLast->nBits);
-  bnNew *= nActualTimespan;
-  bnNew /= nTargetTimespan;
+  bnNew.SetCompact(pindexLast->nBits); // 获取当前难度值
+  bnNew *= nActualTimespan;            // 乘以实际时间跨度
+  bnNew /= nTargetTimespan;            // 除以目标时间跨度
 
+  // 再次确保难度值不超过最大限制
   if (bnNew > bnProofOfWorkLimit)
     bnNew = bnProofOfWorkLimit;
 
@@ -623,7 +644,7 @@ unsigned int GetNextWorkRequired(const CBlockIndex *pindexLast) {
       CBigNum().SetCompact(pindexLast->nBits).getuint256().ToString().c_str());
   printf("After:  %08x  %s\n", bnNew.GetCompact(),
          bnNew.getuint256().ToString().c_str());
-
+  // 返回新的难度值（压缩格式）
   return bnNew.GetCompact();
 }
 
@@ -1081,20 +1102,37 @@ bool CBlock::AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos) {
   return true;
 }
 
+/**
+ * 检查区块是否合法（不依赖上下文的检查）
+ *
+ * 这些检查是独立于上下文的，可以在保存孤块之前进行验证
+ * 主要检查区块的基本合法性，包括大小、时间戳、交易结构、工作量证明等
+ *
+ * @return 如果区块合法返回 true，否则返回 false
+ */
 bool CBlock::CheckBlock() const {
   // These are checks that are independent of context
   // that can be verified before saving an orphan block.
 
   // Size limits
+  // 检查区块大小限制
+  // 1. 交易列表不能为空
+  // 2. 交易数量不能超过最大限制
+  // 3. 区块序列化后的大小不能超过最大限制
   if (vtx.empty() || vtx.size() > MAX_SIZE ||
       ::GetSerializeSize(*this, SER_DISK) > MAX_SIZE)
     return error("CheckBlock() : size limits failed");
 
   // Check timestamp
+  // 检查时间戳：区块时间不能超过当前调整时间后2小时
+  // 防止区块时间设置得过于未来，影响网络同步
   if (nTime > GetAdjustedTime() + 2 * 60 * 60)
     return error("CheckBlock() : block timestamp too far in the future");
 
   // First transaction must be coinbase, the rest must not be
+  // 检查币基交易规则：
+  // 1. 第一个交易必须是币基交易
+  // 2. 其余交易不能是币基交易
   if (vtx.empty() || !vtx[0].IsCoinBase())
     return error("CheckBlock() : first tx is not coinbase");
   for (int i = 1; i < vtx.size(); i++)
@@ -1102,51 +1140,74 @@ bool CBlock::CheckBlock() const {
       return error("CheckBlock() : more than one coinbase");
 
   // Check transactions
+  // 检查区块中的所有交易是否合法
   foreach (const CTransaction &tx, vtx)
     if (!tx.CheckTransaction())
       return error("CheckBlock() : CheckTransaction failed");
 
   // Check proof of work matches claimed amount
+  // 检查工作量证明是否符合要求：
+  // 1. 难度值不能低于最小工作量要求
+  // 2. 区块哈希值必须小于目标难度值
   if (CBigNum().SetCompact(nBits) > bnProofOfWorkLimit)
     return error("CheckBlock() : nBits below minimum work");
   if (GetHash() > CBigNum().SetCompact(nBits).getuint256())
     return error("CheckBlock() : hash doesn't match nBits");
 
   // Check merkleroot
+  // 检查默克尔树根是否与实际计算的一致
+  // 确保交易列表没有被篡改
   if (hashMerkleRoot != BuildMerkleTree())
     return error("CheckBlock() : hashMerkleRoot mismatch");
 
   return true;
 }
 
+/**
+ * 接受区块到区块链中
+ *
+ * 执行依赖上下文的区块验证，包括区块连接性、时间戳、工作量证明等检查
+ * 并将区块写入磁盘，添加到区块索引中
+ *
+ * @return 如果区块被成功接受返回 true，否则返回 false
+ */
 bool CBlock::AcceptBlock() {
   // Check for duplicate
+  // 检查区块是否已存在于区块索引中
   uint256 hash = GetHash();
   if (mapBlockIndex.count(hash))
     return error("AcceptBlock() : block already in mapBlockIndex");
 
   // Get prev block index
+  // 获取前一个区块的索引
   map<uint256, CBlockIndex *>::iterator mi = mapBlockIndex.find(hashPrevBlock);
   if (mi == mapBlockIndex.end())
     return error("AcceptBlock() : prev block not found");
   CBlockIndex *pindexPrev = (*mi).second;
 
   // Check timestamp against prev
+  // 检查区块时间戳是否早于前一个区块的中位数时间
+  // 确保区块时间是递增的
   if (nTime <= pindexPrev->GetMedianTimePast())
     return error("AcceptBlock() : block's timestamp is too early");
 
   // Check proof of work
+  // 检查工作量证明是否正确
+  // 验证区块的难度值是否符合网络要求
   if (nBits != GetNextWorkRequired(pindexPrev))
     return error("AcceptBlock() : incorrect proof of work");
 
   // Write block to history file
+  // 将区块写入历史文件
   unsigned int nFile;
   unsigned int nBlockPos;
   if (!WriteToDisk(!fClient, nFile, nBlockPos))
     return error("AcceptBlock() : WriteToDisk failed");
+  // 将区块添加到区块索引
   if (!AddToBlockIndex(nFile, nBlockPos))
     return error("AcceptBlock() : AddToBlockIndex failed");
 
+  // 如果这是最佳链，广播区块
   if (hashBestChain == hash)
     RelayInventory(CInv(MSG_BLOCK, hash));
 

@@ -277,10 +277,10 @@ public:
 // 网络中广播的、包含在区块中的基本交易。一笔交易可以包含多个输入和输出。
 class CTransaction {
 public:
-  int nVersion;            // 交易版本号，用于协议升级
-  vector<CTxIn> vin;       // 交易输入列表
-  vector<CTxOut> vout;     // 交易输出列表
-  int nLockTime;           // 锁定时间，交易生效的区块高度或时间戳
+  int nVersion;        // 交易版本号，用于协议升级
+  vector<CTxIn> vin;   // 交易输入列表
+  vector<CTxOut> vout; // 交易输出列表
+  int nLockTime;       // 锁定时间，交易生效的区块高度或时间戳
 
   /**
    * 构造函数
@@ -618,9 +618,9 @@ public:
 // 一种与区块链存在关联的、通过默克尔分支进行连接的交易操作
 class CMerkleTx : public CTransaction {
 public:
-  uint256 hashBlock;           // 交易所在区块的哈希值
+  uint256 hashBlock;             // 交易所在区块的哈希值
   vector<uint256> vMerkleBranch; // 默克尔分支，用于验证交易存在性
-  int nIndex;                  // 交易在区块中的索引位置
+  int nIndex;                    // 交易在区块中的索引位置
 
   // memory only
   mutable bool fMerkleVerified; // 默克尔验证状态（仅内存中使用）
@@ -724,17 +724,17 @@ public:
 // 它包含了任何用于将该交易链接回区块链所需的未记录交易信息。
 class CWalletTx : public CMerkleTx {
 public:
-  vector<CMerkleTx> vtxPrev;           // 前序交易列表，用于构建交易链
-  map<string, string> mapValue;         // 键值对数据，存储交易相关信息
+  vector<CMerkleTx> vtxPrev;               // 前序交易列表，用于构建交易链
+  map<string, string> mapValue;            // 键值对数据，存储交易相关信息
   vector<pair<string, string>> vOrderForm; // 订单表单，用于交易附加信息
-  unsigned int fTimeReceivedIsTxTime;   // 接收时间是否为交易时间
-  unsigned int nTimeReceived;           // 节点接收交易的时间
-  char fFromMe;                         // 是否由当前钱包发送
-  char fSpent;                          // 交易是否已花费
+  unsigned int fTimeReceivedIsTxTime;      // 接收时间是否为交易时间
+  unsigned int nTimeReceived;              // 节点接收交易的时间
+  char fFromMe;                            // 是否由当前钱包发送
+  char fSpent;                             // 交易是否已花费
   //// probably need to sign the order info so know it came from payer
   // 可能需要签署订单信息以确认其确实来自付款方
   //  memory only 内存中仅使用
-  mutable unsigned int nTimeDisplayed;  // 交易显示时间（仅内存中使用）
+  mutable unsigned int nTimeDisplayed; // 交易显示时间（仅内存中使用）
 
   /**
    * 构造函数
@@ -889,10 +889,12 @@ public:
 //
 //
 // 节点将新的交易汇集到一个区块中，将它们进行哈希运算生成一个哈希树，
-// 并遍历 nonce 值以使区块的哈希值满足工作量证明的要求。当它们解决工作量证明问题时，
+// 并遍历 nonce
+// 值以使区块的哈希值满足工作量证明的要求。当它们解决工作量证明问题时，
 // 他们会将该区块广播给所有人，然后该区块会被添加到区块链中。
 // 区块中的第一个交易是一个特殊的交易，它创建了一个由区块的创建者所拥有的新货币。//
-// 块会被附加到磁盘上的 blk0001.dat 文件中。这些块在磁盘上的位置是由内存中的 CBlockIndex 对象进行索引管理的。//
+// 块会被附加到磁盘上的 blk0001.dat 文件中。这些块在磁盘上的位置是由内存中的
+// CBlockIndex 对象进行索引管理的。//
 
 class CBlock {
 public:
@@ -1065,7 +1067,8 @@ public:
 // 区块链是一种树状结构，起始点是创世区块，位于根部。
 // 每个区块都有可能有多个成为下一区块的候选者。
 // pprev 和 pnext 构成了贯穿主链/最长链的路径。
-// 一个区块索引可能有多个指向它的 pprev，但 pnext 只会指向最长分支，或者如果该区块不属于最长链，则 pnext 会为空。//
+// 一个区块索引可能有多个指向它的 pprev，但 pnext
+// 只会指向最长分支，或者如果该区块不属于最长链，则 pnext 会为空。//
 
 class CBlockIndex {
 public:
@@ -1133,16 +1136,28 @@ public:
 
   enum { nMedianTimeSpan = 11 };
 
+  /**
+   * 获取过去nMedianTimeSpan个区块的中位数时间
+   *
+   * 计算最近nMedianTimeSpan个区块的时间戳的中位数，用于时间同步和验证
+   * 中位数时间可以抵抗个别节点的时间偏移，提供更稳定的时间参考
+   *
+   * @return 返回最近nMedianTimeSpan个区块的中位数时间戳
+   */
   int64 GetMedianTimePast() const {
+    // 创建一个数组pmedian来存储最近nMedianTimeSpan个区块的时间戳
     unsigned int pmedian[nMedianTimeSpan];
+    // 将pbegin指向数组pmedian的最后一个元素
     unsigned int *pbegin = &pmedian[nMedianTimeSpan];
+    // 将pend指向数组pmedian的最后一个元素
     unsigned int *pend = &pmedian[nMedianTimeSpan];
-
     const CBlockIndex *pindex = this;
+    // 从当前区块开始，向前遍历 11 个区块，将它们的时间戳存入数组
     for (int i = 0; i < nMedianTimeSpan && pindex; i++, pindex = pindex->pprev)
       *(--pbegin) = pindex->nTime;
-
+    // 对时间戳数组排序，找到中位数
     sort(pbegin, pend);
+    // 返回中位数
     return pbegin[(pend - pbegin) / 2];
   }
 
